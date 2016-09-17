@@ -24,25 +24,22 @@
 #ifndef _VMAP_H
 #define _VMAP_H
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/I_Version.h"
+#include "ts/ink_string.h"
 
-#define MAX_INTERFACE  16
-#define MAX_SUB_ID      8
+#define MAX_INTERFACE 16
+#define MAX_SUB_ID 8
 
-
-typedef struct _vip_info
-{
+typedef struct _vip_info {
   char interface[MAX_INTERFACE];
   char sub_interface_id[MAX_SUB_ID];
 } VIPInfo;
 
-
-typedef struct _realip_info
-{
+typedef struct _realip_info {
   struct in_addr real_ip;
   bool mappings_for_interface;
 } RealIPInfo;
-
 
 /*
  * class VMap
@@ -59,11 +56,9 @@ typedef struct _realip_info
  */
 class VMap
 {
-
 public:
-
-  VMap(char *interface, unsigned long ip, ink_mutex * m);
-   ~VMap();
+  VMap(char *interface, unsigned long ip, ink_mutex *m);
+  ~VMap();
 
   void downAddrs();
   void downOurAddrs();
@@ -94,7 +89,7 @@ public:
   AppVersionInfo appVersionInfo;
 
   int enabled;
-  bool turning_off;             /* are we turning off VIP but haven't down'd the addr? */
+  bool turning_off; /* are we turning off VIP but haven't down'd the addr? */
   /* map_init has never been used, remove it to avoid coverity complain */
   int map_change_thresh;
   time_t last_map_change;
@@ -118,10 +113,9 @@ public:
   InkHashTable *id_map;
   InkHashTable *interface_realip_map;
 
-  char *interface;              /* used to passed the interface from VMap::VMap to VMap::init */
+  char *interface; /* used to passed the interface from VMap::VMap to VMap::init */
 
 private:
-
-};                              /* End class VMap */
+}; /* End class VMap */
 
 #endif /* _VMAP_H */

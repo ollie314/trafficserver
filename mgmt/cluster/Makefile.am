@@ -17,14 +17,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+include $(top_srcdir)/build/tidy.mk
+
 AM_CPPFLAGS = \
   -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
   -I$(top_srcdir)/mgmt \
   -I$(top_srcdir)/mgmt/api/include \
   -I$(top_srcdir)/mgmt/utils \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib
+  -I$(top_srcdir)/lib
 
 noinst_LTLIBRARIES = libcluster.la
 
@@ -33,3 +33,6 @@ libcluster_la_SOURCES = \
   ClusterCom.h \
   VMap.cc \
   VMap.h
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

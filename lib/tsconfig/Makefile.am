@@ -17,14 +17,14 @@
 #  limitations under the License.
 
 lib_LTLIBRARIES = libtsconfig.la
-noinst_PROGRAMS = test-tsconfig
+check_PROGRAMS = test-tsconfig
 libtsconfig_la_LDFLAGS = -no-undefined -version-info @TS_LIBTOOL_VERSION@
 
 AM_CFLAGS += @FLEX_CFLAGS@
 AM_YFLAGS = --yacc -d -p tsconfig
 
 AM_CPPFLAGS = \
-  -I$(top_srcdir)/lib 
+  -I$(top_srcdir)/lib
 
 BUILT_SOURCES = \
   TsConfigGrammar.hpp
@@ -68,3 +68,8 @@ test_tsconfig_LDADD = libtsconfig.la ../ts/libtsutil.la
 # it more easily in C++.
 TsConfigGrammar.hpp: TsConfigGrammar.h BisonHeaderToC++.sed
 	$(SED) -f $(srcdir)/BisonHeaderToC++.sed $(srcdir)/TsConfigGrammar.h > $@
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

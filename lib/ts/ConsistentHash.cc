@@ -28,7 +28,7 @@
 #include <cstdio>
 
 std::ostream &
-operator << (std::ostream & os, ATSConsistentHashNode & thing)
+operator<<(std::ostream &os, ATSConsistentHashNode &thing)
 {
   return os << thing.name;
 }
@@ -38,7 +38,7 @@ ATSConsistentHash::ATSConsistentHash(int r, ATSHash64 *h) : replicas(r), hash(h)
 }
 
 void
-ATSConsistentHash::insert(ATSConsistentHashNode * node, float weight, ATSHash64 *h)
+ATSConsistentHash::insert(ATSConsistentHashNode *node, float weight, ATSHash64 *h)
 {
   int i;
   char numstr[256];
@@ -57,7 +57,7 @@ ATSConsistentHash::insert(ATSConsistentHashNode * node, float weight, ATSHash64 
   string_stream << *node;
   std_string = string_stream.str();
 
-  for (i = 0; i < (int) roundf(replicas * weight); i++) {
+  for (i = 0; i < (int)roundf(replicas * weight); i++) {
     snprintf(numstr, 256, "%d-", i);
     thash->update(numstr, strlen(numstr));
     thash->update(std_string.c_str(), strlen(std_string.c_str()));
@@ -107,7 +107,6 @@ ATSConsistentHash::lookup(const char *url, ATSConsistentHashIter *i, bool *w, AT
       *wptr = true;
       *iter = NodeMap.begin();
     }
-
   } else {
     (*iter)++;
   }
@@ -175,6 +174,34 @@ ATSConsistentHash::lookup_available(const char *url, ATSConsistentHashIter *i, b
     } else if (*wptr && *iter == NodeMap.end()) {
       return NULL;
     }
+  }
+
+  return (*iter)->second;
+}
+
+ATSConsistentHashNode *
+ATSConsistentHash::lookup_by_hashval(uint64_t hashval, ATSConsistentHashIter *i, bool *w)
+{
+  ATSConsistentHashIter NodeMapIterUp, *iter;
+  bool *wptr, wrapped = false;
+
+  if (w) {
+    wptr = w;
+  } else {
+    wptr = &wrapped;
+  }
+
+  if (i) {
+    iter = i;
+  } else {
+    iter = &NodeMapIterUp;
+  }
+
+  *iter = NodeMap.lower_bound(hashval);
+
+  if (*iter == NodeMap.end()) {
+    *wptr = true;
+    *iter = NodeMap.begin();
   }
 
   return (*iter)->second;

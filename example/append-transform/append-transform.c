@@ -41,12 +41,11 @@
 #include <string.h>
 
 #include "ts/ts.h"
-#include "ink_defs.h"
+#include "ts/ink_defs.h"
 
-#define ASSERT_SUCCESS(_x) TSAssert ((_x) == TS_SUCCESS)
+#define ASSERT_SUCCESS(_x) TSAssert((_x) == TS_SUCCESS)
 
-typedef struct
-{
+typedef struct {
   TSVIO output_vio;
   TSIOBuffer output_buffer;
   TSIOBufferReader output_reader;
@@ -62,10 +61,10 @@ my_data_alloc()
 {
   MyData *data;
 
-  data = (MyData *) TSmalloc(sizeof(MyData));
+  data = (MyData *)TSmalloc(sizeof(MyData));
   TSReleaseAssert(data);
 
-  data->output_vio = NULL;
+  data->output_vio    = NULL;
   data->output_buffer = NULL;
   data->output_reader = NULL;
   data->append_needed = 1;
@@ -74,7 +73,7 @@ my_data_alloc()
 }
 
 static void
-my_data_destroy(MyData * data)
+my_data_destroy(MyData *data)
 {
   if (data) {
     if (data->output_buffer)
@@ -111,10 +110,10 @@ handle_transform(TSCont contp)
     if (towrite != INT64_MAX) {
       towrite += append_buffer_length;
     }
-    data = my_data_alloc();
+    data                = my_data_alloc();
     data->output_buffer = TSIOBufferCreate();
     data->output_reader = TSIOBufferReaderAlloc(data->output_buffer);
-    data->output_vio = TSVConnWrite(output_conn, contp, data->output_reader, towrite);
+    data->output_vio    = TSVConnWrite(output_conn, contp, data->output_reader, towrite);
     TSContDataSet(contp, data);
   }
 
@@ -208,20 +207,18 @@ append_transform(TSCont contp, TSEvent event, void *edata ATS_UNUSED)
     return 0;
   } else {
     switch (event) {
-    case TS_EVENT_ERROR:
-      {
-        TSVIO write_vio;
+    case TS_EVENT_ERROR: {
+      TSVIO write_vio;
 
-        /* Get the write VIO for the write operation that was
-           performed on ourself. This VIO contains the continuation of
-           our parent transformation. */
-        write_vio = TSVConnWriteVIOGet(contp);
+      /* Get the write VIO for the write operation that was
+         performed on ourself. This VIO contains the continuation of
+         our parent transformation. */
+      write_vio = TSVConnWriteVIOGet(contp);
 
-        /* Call back the write VIO continuation to let it know that we
-           have completed the write operation. */
-        TSContCall(TSVIOContGet(write_vio), TS_EVENT_ERROR, write_vio);
-      }
-      break;
+      /* Call back the write VIO continuation to let it know that we
+         have completed the write operation. */
+      TSContCall(TSVIOContGet(write_vio), TS_EVENT_ERROR, write_vio);
+    } break;
     case TS_EVENT_VCONN_WRITE_COMPLETE:
       /* When our output connection says that it has finished
          reading all the data we've written to it then we should
@@ -252,36 +249,35 @@ transformable(TSHttpTxn txnp)
   const char *value;
   int val_length;
 
-  TSHttpTxnServerRespGet(txnp, &bufp, &hdr_loc);
+  if (TS_SUCCESS == TSHttpTxnServerRespGet(txnp, &bufp, &hdr_loc)) {
+    /*
+     *    We are only interested in "200 OK" responses.
+     */
 
-  /*
-   *    We are only interested in "200 OK" responses.
-   */
+    if (TS_HTTP_STATUS_OK == (resp_status = TSHttpHdrStatusGet(bufp, hdr_loc))) {
+      /* We only want to do the transformation on documents that have a
+         content type of "text/html". */
+      field_loc = TSMimeHdrFieldFind(bufp, hdr_loc, "Content-Type", 12);
+      if (!field_loc) {
+        ASSERT_SUCCESS(TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc));
+        return 0;
+      }
 
-  if (TS_HTTP_STATUS_OK == (resp_status = TSHttpHdrStatusGet(bufp, hdr_loc))) {
+      value = TSMimeHdrFieldValueStringGet(bufp, hdr_loc, field_loc, -1, &val_length);
+      if (value && (strncasecmp(value, "text/html", sizeof("text/html") - 1) == 0)) {
+        ASSERT_SUCCESS(TSHandleMLocRelease(bufp, hdr_loc, field_loc));
+        ASSERT_SUCCESS(TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc));
 
-    /* We only want to do the transformation on documents that have a
-       content type of "text/html". */
-    field_loc = TSMimeHdrFieldFind(bufp, hdr_loc, "Content-Type", 12);
-    if (!field_loc) {
-      ASSERT_SUCCESS(TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc));
-      return 0;
-    }
-
-    value = TSMimeHdrFieldValueStringGet(bufp, hdr_loc, field_loc, -1, &val_length);
-    if (value && (strncasecmp(value, "text/html", sizeof("text/html") - 1) == 0)) {
-      ASSERT_SUCCESS(TSHandleMLocRelease(bufp, hdr_loc, field_loc));
-      ASSERT_SUCCESS(TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc));
-
-      return 1;
-    } else {
-      ASSERT_SUCCESS(TSHandleMLocRelease(bufp, hdr_loc, field_loc));
-      ASSERT_SUCCESS(TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc));
-      return 0;
+        return 1;
+      } else {
+        ASSERT_SUCCESS(TSHandleMLocRelease(bufp, hdr_loc, field_loc));
+        ASSERT_SUCCESS(TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc));
+        return 0;
+      }
     }
   }
 
-  return 0;                     /* not a 200 */
+  return 0; /* not a 200 */
 }
 
 static void
@@ -296,7 +292,7 @@ transform_add(TSHttpTxn txnp)
 static int
 transform_plugin(TSCont contp ATS_UNUSED, TSEvent event, void *edata)
 {
-  TSHttpTxn txnp = (TSHttpTxn) edata;
+  TSHttpTxn txnp = (TSHttpTxn)edata;
 
   switch (event) {
   case TS_EVENT_HTTP_READ_RESPONSE_HDR:
@@ -326,12 +322,12 @@ load(const char *filename)
     return 0;
   }
 
-  append_buffer = TSIOBufferCreate();
+  append_buffer        = TSIOBufferCreate();
   append_buffer_reader = TSIOBufferReaderAlloc(append_buffer);
 
   for (;;) {
     blk = TSIOBufferStart(append_buffer);
-    p = TSIOBufferBlockWriteStart(blk, &avail);
+    p   = TSIOBufferBlockWriteStart(blk, &avail);
 
     err = TSfread(fp, p, avail);
     if (err > 0) {
@@ -352,22 +348,22 @@ TSPluginInit(int argc, const char *argv[])
 {
   TSPluginRegistrationInfo info;
 
-  info.plugin_name = "append-transform";
-  info.vendor_name = "MyCompany";
+  info.plugin_name   = "append-transform";
+  info.vendor_name   = "MyCompany";
   info.support_email = "ts-api-support@MyCompany.com";
 
-  if (TSPluginRegister(TS_SDK_VERSION_3_0, &info) != TS_SUCCESS) {
-    TSError("Plugin registration failed.\n");
+  if (TSPluginRegister(&info) != TS_SUCCESS) {
+    TSError("[append-transform] Plugin registration failed.");
     goto Lerror;
   }
 
   if (argc != 2) {
-    TSError("usage: %s <filename>\n", argv[0]);
+    TSError("[append-transform] Usage: %s <filename>", argv[0]);
     goto Lerror;
   }
 
   if (!load(argv[1])) {
-    TSError("[append-transform] Could not load %s\n", argv[1]);
+    TSError("[append-transform] Could not load %s", argv[1]);
     goto Lerror;
   }
 
@@ -376,5 +372,5 @@ TSPluginInit(int argc, const char *argv[])
 
 Lerror:
 
-  TSError("[append-transform] Unable to initialize plugin\n");
+  TSError("[append-transform] Unable to initialize plugin");
 }

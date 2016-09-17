@@ -25,14 +25,16 @@
 #ifndef _EThread_h_
 #define _EThread_h_
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_rand.h"
+#include "ts/I_Version.h"
 #include "I_Thread.h"
 #include "I_PriorityEventQueue.h"
 #include "I_ProtectedQueue.h"
 
 // TODO: This would be much nicer to have "run-time" configurable (or something),
 // perhaps based on proxy.config.stat_api.max_stats_allowed or other configs. XXX
-#define PER_THREAD_DATA (1024*1024)
+#define PER_THREAD_DATA (1024 * 1024)
 
 // This is not used by the cache anymore, it uses proxy.config.cache.mutex_retry_delay
 // instead.
@@ -51,9 +53,10 @@ class Continuation;
 enum ThreadType {
   REGULAR = 0,
   MONITOR,
-  DEDICATED
+  DEDICATED,
 };
 
+extern bool shutdown_event_system;
 
 /**
   Event System specific type of thread.
@@ -84,7 +87,7 @@ enum ThreadType {
   @see Event
 
 */
-class EThread: public Thread
+class EThread : public Thread
 {
 public:
   /*-------------------------------------------------------*\
@@ -130,8 +133,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_at(Continuation *c,
-                     ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_at(Continuation *c, ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -151,8 +153,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_in(Continuation *c,
-                     ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_in(Continuation *c, ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -212,8 +213,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_at_local(Continuation *c,
-                           ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_at_local(Continuation *c, ink_hrtime atimeout_at, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -234,8 +234,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_in_local(Continuation *c,
-                           ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_in_local(Continuation *c, ink_hrtime atimeout_in, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
 
   /**
     Schedules the continuation on this EThread to receive an event
@@ -255,8 +254,7 @@ public:
       of this callback.
 
   */
-  Event *schedule_every_local(Continuation *c,
-                              ink_hrtime aperiod, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
+  Event *schedule_every_local(Continuation *c, ink_hrtime aperiod, int callback_event = EVENT_INTERVAL, void *cookie = NULL);
 
   /* private */
 
@@ -267,7 +265,7 @@ public:
 private:
   // prevent unauthorized copies (Not implemented)
   EThread(const EThread &);
-  EThread & operator =(const EThread &);
+  EThread &operator=(const EThread &);
 
   /*-------------------------------------------------------*\
   |  UNIX Interface                                         |
@@ -320,9 +318,9 @@ public:
   EventIO *ep;
 
   ThreadType tt;
-  Event *oneevent;              // For dedicated event thread
+  Event *oneevent; // For dedicated event thread
 
-  ServerSessionPool* server_session_pool;
+  ServerSessionPool *server_session_pool;
 };
 
 /**
@@ -334,12 +332,12 @@ class ink_dummy_for_new
 {
 };
 
-inline void *operator
-new(size_t, ink_dummy_for_new *p)
+inline void *
+operator new(size_t, ink_dummy_for_new *p)
 {
-  return (void *) p;
+  return (void *)p;
 }
-#define ETHREAD_GET_PTR(thread, offset) ((void*)((char*)(thread)+(offset)))
+#define ETHREAD_GET_PTR(thread, offset) ((void *)((char *)(thread) + (offset)))
 
 extern EThread *this_ethread();
 #endif /*_EThread_h_*/

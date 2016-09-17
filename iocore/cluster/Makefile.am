@@ -18,10 +18,8 @@
 
 AM_CPPFLAGS = \
   $(iocore_include_dirs) \
-  -I$(top_builddir)/lib \
   -I$(top_srcdir)/lib \
   -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
   -I$(top_srcdir)/proxy/http \
   -I$(top_srcdir)/proxy/hdrs \
   -I$(top_srcdir)/proxy/api/ts \
@@ -59,3 +57,8 @@ libinkcluster_a_SOURCES = \
 #test_Cluster_SOURCES = \
 #  test_I_Cluster.cc \
 #  test_P_Cluster.cc
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

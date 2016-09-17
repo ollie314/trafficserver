@@ -31,8 +31,9 @@
  * These routines return char*'s to malloc-ed strings.  The caller is
  * responsible for freeing the strings.
  */
-#include "libts.h"
-#include "ink_assert.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_base64.h"
+#include "ts/ink_assert.h"
 
 // TODO: The code here seems a bit klunky, and could probably be improved a bit.
 
@@ -40,7 +41,7 @@ bool
 ats_base64_encode(const unsigned char *inBuffer, size_t inBufferSize, char *outBuffer, size_t outBufSize, size_t *length)
 {
   static const char _codes[66] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  char *obuf = outBuffer;
+  char *obuf                   = outBuffer;
   char in_tail[4];
 
   if (outBufSize < ATS_BASE64_ENCODE_DSTLEN(inBufferSize))
@@ -72,15 +73,15 @@ ats_base64_encode(const unsigned char *inBuffer, size_t inBufferSize, char *outB
     memset(in_tail, 0, sizeof(in_tail));
     memcpy(in_tail, inBuffer, inBufferSize);
 
-    *(obuf) = _codes[(in_tail[0] >> 2) & 077];
+    *(obuf)     = _codes[(in_tail[0] >> 2) & 077];
     *(obuf + 1) = _codes[((in_tail[0] & 03) << 4) | ((in_tail[1] >> 4) & 017)];
     *(obuf + 2) = _codes[((in_tail[1] & 017) << 2) | ((in_tail[2] >> 6) & 017)];
     *(obuf + 3) = _codes[in_tail[2] & 077];
 
     if (inBufferSize == 1)
       *(obuf + 2) = '=';
-    *(obuf + 3) = '=';
-    *(obuf + 4) = '\0';
+    *(obuf + 3)   = '=';
+    *(obuf + 4)   = '\0';
 
     if (length)
       *length = (obuf + 4) - outBuffer;
@@ -95,7 +96,6 @@ ats_base64_encode(const char *inBuffer, size_t inBufferSize, char *outBuffer, si
   return ats_base64_encode((const unsigned char *)inBuffer, inBufferSize, outBuffer, outBufSize, length);
 }
 
-
 /*-------------------------------------------------------------------------
   This is a reentrant, and malloc free implemetnation of ats_base64_decode.
   -------------------------------------------------------------------------*/
@@ -108,25 +108,21 @@ ats_base64_encode(const char *inBuffer, size_t inBufferSize, char *outBuffer, si
 
 /* Converts a printable character to it's six bit representation */
 const unsigned char printableToSixBit[256] = {
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 62, 64, 63,
-  52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 64, 64, 64, 64, 64, 64, 64, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64, 63, 64, 26, 27,
-  28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64
-};
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 62, 64, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 64, 64, 64, 64, 64, 64,
+  64, 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64, 63,
+  64, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 64, 64, 64, 64,
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64};
 
 bool
 ats_base64_decode(const char *inBuffer, size_t inBufferSize, unsigned char *outBuffer, size_t outBufSize, size_t *length)
 {
-  size_t inBytes = 0;
-  size_t decodedBytes = 0;
-  unsigned char *buf = outBuffer;
+  size_t inBytes        = 0;
+  size_t decodedBytes   = 0;
+  unsigned char *buf    = outBuffer;
   int inputBytesDecoded = 0;
 
   // Make sure there is sufficient space in the output buffer
@@ -139,9 +135,9 @@ ats_base64_decode(const char *inBuffer, size_t inBufferSize, unsigned char *outB
     ++inBytes;
 
   for (size_t i = 0; i < inBytes; i += 4) {
-    buf[0] = (unsigned char) (DECODE(inBuffer[0]) << 2 | DECODE(inBuffer[1]) >> 4);
-    buf[1] = (unsigned char) (DECODE(inBuffer[1]) << 4 | DECODE(inBuffer[2]) >> 2);
-    buf[2] = (unsigned char) (DECODE(inBuffer[2]) << 6 | DECODE(inBuffer[3]));
+    buf[0] = (unsigned char)(DECODE(inBuffer[0]) << 2 | DECODE(inBuffer[1]) >> 4);
+    buf[1] = (unsigned char)(DECODE(inBuffer[1]) << 4 | DECODE(inBuffer[2]) >> 2);
+    buf[2] = (unsigned char)(DECODE(inBuffer[2]) << 6 | DECODE(inBuffer[3]));
 
     buf += 3;
     inBuffer += 4;

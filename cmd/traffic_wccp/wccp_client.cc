@@ -36,39 +36,37 @@
 
 #include <poll.h>
 
-#include "ink_memory.h"
+#include "ts/ink_memory.h"
 #include "Wccp.h"
 #include "WccpUtil.h"
 #include "tsconfig/TsValue.h"
-#include "ink_lockfile.h"
+#include "ts/ink_lockfile.h"
 
 #define WCCP_LOCK "wccp.pid"
 
-bool do_debug = false;
+bool do_debug  = false;
 bool do_daemon = false;
 
-static char const USAGE_TEXT[] =
-  "%s\n"
-  "--address IP address to bind.\n"
-  "--router Booststrap IP address for routers.\n"
-  "--service Path to service group definitions.\n"
-  "--debug Print debugging information.\n"
-  "--daemon Run as daemon.\n"
-  "--help Print usage and exit.\n"
-  ;
+static char const USAGE_TEXT[] = "%s\n"
+                                 "--address IP address to bind.\n"
+                                 "--router Booststrap IP address for routers.\n"
+                                 "--service Path to service group definitions.\n"
+                                 "--debug Print debugging information.\n"
+                                 "--daemon Run as daemon.\n"
+                                 "--help Print usage and exit.\n";
 
 static void
-PrintErrata(ts::Errata const& err) 
+PrintErrata(ts::Errata const &err)
 {
   size_t n;
   static size_t const SIZE = 4096;
   char buff[SIZE];
   if (err.size()) {
     ts::Errata::Code code = err.top().getCode();
-    if (do_debug || code >=  wccp::LVL_WARN) {
+    if (do_debug || code >= wccp::LVL_WARN) {
       n = err.write(buff, SIZE, 1, 0, 2, "> ");
       // strip trailing newlines.
-      while (n && (buff[n-1] == '\n' || buff[n-1] == '\r'))
+      while (n && (buff[n - 1] == '\n' || buff[n - 1] == '\r'))
         buff[--n] = 0;
       printf("%s\n", buff);
     }
@@ -76,7 +74,7 @@ PrintErrata(ts::Errata const& err)
 }
 
 static void
-Init_Errata_Logging() 
+Init_Errata_Logging()
 {
   ts::Errata::registerSink(&PrintErrata);
 }
@@ -107,72 +105,74 @@ check_lockfile()
     } else {
       fprintf(stderr, "\n");
     }
-    _exit(1);
+    ::exit(1);
   }
 }
 
 int
-main(int argc, char** argv) {
+main(int argc, char **argv)
+{
   wccp::Cache wcp;
 
   // getopt return values. Selected to avoid collisions with
   // short arguments.
   static int const OPT_ADDRESS = 257; ///< Bind to IP address option.
-  static int const OPT_HELP = 258; ///< Print help message.
-  static int const OPT_ROUTER = 259; ///< Seeded router IP address.
+  static int const OPT_HELP    = 258; ///< Print help message.
+  static int const OPT_ROUTER  = 259; ///< Seeded router IP address.
   static int const OPT_SERVICE = 260; ///< Service group definition.
-  static int const OPT_DEBUG = 261; ///< Enable debug printing
-  static int const OPT_DAEMON = 262; ///< Disconnect and run as daemon
+  static int const OPT_DEBUG   = 261; ///< Enable debug printing
+  static int const OPT_DAEMON  = 262; ///< Disconnect and run as daemon
 
   static option OPTIONS[] = {
-    { "address", 1, 0, OPT_ADDRESS },
-    { "router", 1, 0, OPT_ROUTER },
-    { "service", 1, 0, OPT_SERVICE },
-    { "debug", 0, 0, OPT_DEBUG },
-    { "daemon", 0, 0, OPT_DAEMON },
-    { "help", 0, 0, OPT_HELP },
-    { 0, 0, 0, 0 } // required terminator.
+    {"address", 1, 0, OPT_ADDRESS},
+    {"router", 1, 0, OPT_ROUTER},
+    {"service", 1, 0, OPT_SERVICE},
+    {"debug", 0, 0, OPT_DEBUG},
+    {"daemon", 0, 0, OPT_DAEMON},
+    {"help", 0, 0, OPT_HELP},
+    {0, 0, 0, 0} // required terminator.
   };
 
-  in_addr ip_addr = { INADDR_ANY };
-  in_addr router_addr = { INADDR_ANY };
+  in_addr ip_addr     = {INADDR_ANY};
+  in_addr router_addr = {INADDR_ANY};
 
   int zret; // getopt return.
   int zidx; // option index.
-  bool fail = false;
-  char const* FAIL_MSG = "";
+  bool fail            = false;
+  char const *FAIL_MSG = "";
 
   while (-1 != (zret = getopt_long_only(argc, argv, "", OPTIONS, &zidx))) {
     switch (zret) {
     case OPT_HELP:
       FAIL_MSG = "Usage:";
-      fail = true;
+      fail     = true;
       break;
     case '?':
       FAIL_MSG = "Invalid option specified.";
-      fail = true;
+      fail     = true;
       break;
     case OPT_ADDRESS:
       if (0 == inet_aton(optarg, &ip_addr)) {
         FAIL_MSG = "Invalid IP address specified for client.";
-        fail = true;
+        fail     = true;
       }
       break;
     case OPT_ROUTER:
       if (0 == inet_aton(optarg, &router_addr)) {
         FAIL_MSG = "Invalid IP address specified for router.";
-        fail = true;
+        fail     = true;
       }
       break;
     case OPT_SERVICE: {
       ts::Errata status = wcp.loadServicesFromFile(optarg);
-      if (!status) fail = true;
+      if (!status)
+        fail = true;
       break;
     }
-    case OPT_DEBUG: 
+    case OPT_DEBUG:
       do_debug = true;
       break;
-    case OPT_DAEMON: 
+    case OPT_DAEMON:
       do_daemon = true;
       break;
     }
@@ -182,7 +182,7 @@ main(int argc, char** argv) {
     printf(USAGE_TEXT, FAIL_MSG);
     return 1;
   }
- 
+
   if (0 > wcp.open(ip_addr.s_addr)) {
     fprintf(stderr, "Failed to open or bind socket.\n");
     return 2;
@@ -192,7 +192,7 @@ main(int argc, char** argv) {
     pid_t pid = fork();
     if (pid > 0) {
       // Successful, the parent should go away
-      _exit(0);
+      ::exit(0);
     }
   }
 
@@ -205,13 +205,13 @@ main(int argc, char** argv) {
   pollfd pfa[POLL_FD_COUNT];
 
   // Poll on the socket.
-  pfa[0].fd = wcp.getSocket();
+  pfa[0].fd     = wcp.getSocket();
   pfa[0].events = POLLIN;
 
   wcp.housekeeping();
 
   while (true) {
-    int n = poll(pfa, POLL_FD_COUNT,  1000);
+    int n = poll(pfa, POLL_FD_COUNT, 1000);
     if (n < 0) { // error
       perror("General polling failure");
       return 5;

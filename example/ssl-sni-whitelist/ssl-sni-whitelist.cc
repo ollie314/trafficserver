@@ -23,28 +23,28 @@
   limitations under the License.
  */
 
-# include <stdio.h>
-# include <memory.h>
-# include <inttypes.h>
-# include <ts/ts.h>
-# include <ink_config.h>
-# include <tsconfig/TsValue.h>
-# include <openssl/ssl.h>
-# include <getopt.h>
+#include <stdio.h>
+#include <memory.h>
+#include <inttypes.h>
+#include <ts/ts.h>
+#include "ts/ink_config.h"
+#include <tsconfig/TsValue.h>
+#include <openssl/ssl.h>
+#include <getopt.h>
 
 using ts::config::Configuration;
 using ts::config::Value;
 
-# define PN "ssl-sni-whitelist"
-# define PCP "[" PN " Plugin] "
+#define PN "ssl-sni-whitelist"
+#define PCP "[" PN " Plugin] "
 
-# if TS_USE_TLS_SNI
+#if TS_USE_TLS_SNI
 
-namespace {
-
+namespace
+{
 std::string ConfigPath;
 
-Configuration Config;	// global configuration
+Configuration Config; // global configuration
 
 int
 Load_Config_File()
@@ -72,9 +72,9 @@ Load_Configuration()
 int
 CB_servername_whitelist(TSCont /* contp */, TSEvent /* event */, void *edata)
 {
-  TSVConn ssl_vc = reinterpret_cast<TSVConn>(edata);
+  TSVConn ssl_vc         = reinterpret_cast<TSVConn>(edata);
   TSSslConnection sslobj = TSVConnSSLConnectionGet(ssl_vc);
-  SSL *ssl = reinterpret_cast<SSL *>(sslobj);
+  SSL *ssl               = reinterpret_cast<SSL *>(sslobj);
   const char *servername = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
 
   bool do_blind_tunnel = true;
@@ -107,19 +107,18 @@ TSPluginInit(int argc, const char *argv[])
 {
   bool success = false;
   TSPluginRegistrationInfo info;
-  TSCont cb_sni = 0; // sni callback continuation
+  TSCont cb_sni                        = 0; // sni callback continuation
   static const struct option longopt[] = {
-    { const_cast<char *>("config"), required_argument, NULL, 'c' },
-    { NULL, no_argument, NULL, '\0' }
+    {const_cast<char *>("config"), required_argument, NULL, 'c'}, {NULL, no_argument, NULL, '\0'},
   };
 
-  info.plugin_name = const_cast<char*>("SSL SNI whitelist");
-  info.vendor_name = const_cast<char*>("Network Geographics");
-  info.support_email = const_cast<char*>("shinrich@network-geographics.com");
+  info.plugin_name   = const_cast<char *>("SSL SNI whitelist");
+  info.vendor_name   = const_cast<char *>("Network Geographics");
+  info.support_email = const_cast<char *>("shinrich@network-geographics.com");
 
   int opt = 0;
   while (opt >= 0) {
-    opt = getopt_long(argc, (char * const *)argv, "c:", longopt, NULL);
+    opt = getopt_long(argc, (char *const *)argv, "c:", longopt, NULL);
     switch (opt) {
     case 'c':
       ConfigPath = optarg;
@@ -128,12 +127,12 @@ TSPluginInit(int argc, const char *argv[])
     }
   }
   if (ConfigPath.length() == 0) {
-    static char const * const DEFAULT_CONFIG_PATH = "ssl_sni_whitelist.config";
-    ConfigPath = std::string(TSConfigDirGet()) + '/' + std::string(DEFAULT_CONFIG_PATH);
+    static char const *const DEFAULT_CONFIG_PATH = "ssl_sni_whitelist.config";
+    ConfigPath                                   = std::string(TSConfigDirGet()) + '/' + std::string(DEFAULT_CONFIG_PATH);
     TSDebug(PN, "No config path set in arguments, using default: %s", DEFAULT_CONFIG_PATH);
   }
 
-  if (TS_SUCCESS != TSPluginRegister(TS_SDK_VERSION_2_0, &info)) {
+  if (TS_SUCCESS != TSPluginRegister(&info)) {
     TSError(PCP "registration failed.");
   } else if (TSTrafficServerVersionGetMajor() < 2) {
     TSError(PCP "requires Traffic Server 2.0 or later.");
@@ -142,7 +141,7 @@ TSPluginInit(int argc, const char *argv[])
   } else if (0 == (cb_sni = TSContCreate(&CB_servername_whitelist, TSMutexCreate()))) {
     TSError(PCP "Failed to create SNI callback.");
   } else {
-    TSHttpHookAdd(TS_SSL_SNI_HOOK, cb_sni);
+    TSHttpHookAdd(TS_SSL_CERT_HOOK, cb_sni);
     success = true;
   }
 
@@ -154,12 +153,12 @@ TSPluginInit(int argc, const char *argv[])
   return;
 }
 
-# else // ! TS_USE_TLS_SNI
+#else // ! TS_USE_TLS_SNI
 
 void
 TSPluginInit(int, const char *[])
 {
-    TSError(PCP "requires TLS SNI which is not available.");
+  TSError(PCP "requires TLS SNI which is not available.");
 }
 
-# endif // TS_USE_TLS_SNI
+#endif // TS_USE_TLS_SNI

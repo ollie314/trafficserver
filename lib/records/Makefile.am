@@ -16,15 +16,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+include $(top_srcdir)/build/tidy.mk
+
 AM_CPPFLAGS = \
   -I$(top_srcdir)/iocore/eventsystem \
   -I$(top_srcdir)/iocore/utils \
   -I$(top_srcdir)/mgmt \
   -I$(top_srcdir)/mgmt/api/include \
   -I$(top_srcdir)/mgmt/utils \
-  -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
-  -I$(top_srcdir)/lib/ts
+  -I$(top_srcdir)/lib
 
 noinst_LIBRARIES = librecords_lm.a librecords_p.a librecords_cop.a
 
@@ -42,7 +42,6 @@ librecords_COMMON = \
   P_RecFile.h \
   P_RecFile.h \
   P_RecMessage.h \
-  P_RecTree.h \
   P_RecUtils.h \
   RecConfigParse.cc \
   RecCore.cc \
@@ -51,7 +50,7 @@ librecords_COMMON = \
   RecHttp.cc \
   RecMessage.cc \
   RecMutex.cc \
-  RecTree.cc \
+  RecRawStats.cc \
   RecUtils.cc
 
 librecords_lm_a_SOURCES = \
@@ -70,3 +69,6 @@ librecords_cop_a_SOURCES = \
   RecConfigParse.cc \
   RecFile.cc \
   RecDebug.cc
+
+tidy-local: $(sort $(DIST_SOURCES))
+	$(CXX_Clang_Tidy)

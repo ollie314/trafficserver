@@ -33,7 +33,7 @@
 
  ****************************************************************************/
 
-#include "Arena.h"
+#include "ts/Arena.h"
 #include <stdio.h>
 
 void
@@ -43,7 +43,7 @@ fill_test_data(char *ptr, int size, int seed)
 
   for (int i = 0; i < size; i++) {
     ptr[i] = a;
-    a = (a + 1) % 52;
+    a      = (a + 1) % 52;
   }
 }
 
@@ -51,7 +51,7 @@ int
 check_test_data(char *ptr, int size, int seed)
 {
   int fail = 0;
-  char a = 'a' + (seed % 52);
+  char a   = 'a' + (seed % 52);
 
   for (int i = 0; i < size; i++) {
     if (ptr[i] != a) {
@@ -66,12 +66,11 @@ check_test_data(char *ptr, int size, int seed)
 int
 test_block_boundries()
 {
-  const int sizes_to_test = 12;
+  const int sizes_to_test   = 12;
   const int regions_to_test = 1024 * 2;
-  char **test_regions = new char *[regions_to_test];
-  int failures = 0;
-  Arena *a = new Arena();
-
+  char **test_regions       = new char *[regions_to_test];
+  int failures              = 0;
+  Arena *a                  = new Arena();
 
   for (int i = 0; i < sizes_to_test; i++) {
     int test_size = 1 << i;
@@ -84,7 +83,7 @@ test_block_boundries()
 
     // Allocate and fill the array
     for (j = 0; j < regions_to_test; j++) {
-      test_regions[j] = (char *) a->alloc(test_size);
+      test_regions[j] = (char *)a->alloc(test_size);
       fill_test_data(test_regions[j], test_size, j);
     }
 
@@ -106,7 +105,7 @@ test_block_boundries()
     a->reset();
   }
 
-  delete[]test_regions;
+  delete[] test_regions;
   delete a;
   return failures;
 }

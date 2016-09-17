@@ -23,15 +23,14 @@ cd "${WORKSPACE}/src"
 autoreconf -fi
 mkdir -p BUILDS && cd BUILDS
 ../configure \
+    --with-user=jenkins \
     --enable-ccache \
     --enable-werror \
     --enable-experimental-plugins \
     --enable-example-plugins \
     --enable-test-tools \
-    --enable-reclaimable-freelist \
-    --enable-wccp \
-    CORES=2
+    --enable-wccp
 
 ${ATS_MAKE} -j5 V=1
-${ATS_MAKE} check VERBOSE=Y
+#${ATS_MAKE} check VERBOSE=Y
 ${ATS_MAKE} clean

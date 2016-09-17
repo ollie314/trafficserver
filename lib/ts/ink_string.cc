@@ -21,7 +21,8 @@
   limitations under the License.
  */
 
-#include "libts.h"   /* MAGIC_EDITING_TAG */
+#include "ts/ink_platform.h"
+#include "ts/ink_assert.h"
 
 #include <assert.h>
 #include <stdarg.h>
@@ -36,7 +37,7 @@ char *
 ink_memcpy_until_char(char *dst, char *src, unsigned int n, unsigned char c)
 {
   unsigned int i = 0;
-  for (; ((i < n) && (((unsigned char) src[i]) != c)); i++)
+  for (; ((i < n) && (((unsigned char)src[i]) != c)); i++)
     dst[i] = src[i];
   return &src[i];
 }
@@ -72,8 +73,7 @@ ink_string_concatenate_strings(char *dest, ...)
   *d++ = '\0';
   va_end(ap);
   return (dest);
-}                               /* End ink_string_concatenate_strings */
-
+} /* End ink_string_concatenate_strings */
 
 /*---------------------------------------------------------------------------*
 
@@ -109,8 +109,7 @@ ink_string_concatenate_strings_n(char *dest, int n, ...)
     *d = '\0';
   va_end(ap);
   return (dest);
-}                               /* End ink_string_concatenate_strings_n */
-
+} /* End ink_string_concatenate_strings_n */
 
 /*---------------------------------------------------------------------------*
 
@@ -138,7 +137,8 @@ ink_string_append(char *dest, char *src, int n)
 
   /* Scan For End Of Dest */
 
-  for (d = dest; (d <= last_valid_char) && (*d != '\0'); d++);
+  for (d = dest; (d <= last_valid_char) && (*d != '\0'); d++)
+    ;
 
   /* If At End Of String, NUL Terminate & Exit */
 
@@ -161,16 +161,15 @@ ink_string_append(char *dest, char *src, int n)
     *d = '\0';
 
   return (dest);
-}                               /* End ink_string_append */
-
+} /* End ink_string_append */
 
 #if !HAVE_STRLCPY
 size_t
 ink_strlcpy(char *dst, const char *src, size_t siz)
 {
-  char *d = dst;
+  char *d       = dst;
   const char *s = src;
-  size_t n = siz;
+  size_t n      = siz;
 
   /* Copy as many bytes as will fit */
   if (n != 0) {
@@ -183,12 +182,12 @@ ink_strlcpy(char *dst, const char *src, size_t siz)
   /* Not enough room in dst, add NUL and traverse rest of src */
   if (n == 0) {
     if (siz != 0)
-      *d = '\0';      /* NUL-terminate dst */
+      *d = '\0'; /* NUL-terminate dst */
     while (*s++)
       ;
   }
 
-  return (s - src - 1);   /* count does not include NUL */
+  return (s - src - 1); /* count does not include NUL */
 }
 #endif
 
@@ -196,16 +195,16 @@ ink_strlcpy(char *dst, const char *src, size_t siz)
 size_t
 ink_strlcat(char *dst, const char *src, size_t siz)
 {
-  char *d = dst;
+  char *d       = dst;
   const char *s = src;
-  size_t n = siz;
+  size_t n      = siz;
   size_t dlen;
 
   /* Find the end of dst and adjust bytes left but don't go past end */
   while (n-- != 0 && *d != '\0')
     d++;
   dlen = d - dst;
-  n = siz - dlen;
+  n    = siz - dlen;
 
   if (n == 0)
     return (dlen + strlen(s));
@@ -218,7 +217,6 @@ ink_strlcat(char *dst, const char *src, size_t siz)
   }
   *d = '\0';
 
-  return (dlen + (s - src));  /* count does not include NUL */
+  return (dlen + (s - src)); /* count does not include NUL */
 }
 #endif
-

@@ -24,13 +24,13 @@
 #ifndef ATS_LOG_MESSAGE_HANDLER_H_
 #define ATS_LOG_MESSAGE_HANDLER_H_
 
+namespace net_instaweb
+{
+namespace log_message_handler
+{
+  void Install();
+} // namespace log_message_handler
 
-namespace net_instaweb {
+} // namespace net_instaweb
 
-  namespace log_message_handler {
-    void Install();
-  }  // namespace log_message_handler
-
-}  // namespace net_instaweb
-
-#endif  // ATS_LOG_MESSAGE_HANDLER_H_
+#endif // ATS_LOG_MESSAGE_HANDLER_H_

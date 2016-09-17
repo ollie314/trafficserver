@@ -21,25 +21,25 @@
   limitations under the License.
  */
 
-#include "ink_platform.h"
-#include "ink_lockfile.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_lockfile.h"
 
-#define LOCKFILE_BUF_LEN 16     // 16 bytes should be enought for a pid
+#define LOCKFILE_BUF_LEN 16 // 16 bytes should be enought for a pid
 
 int
-Lockfile::Open(pid_t * holding_pid)
+Lockfile::Open(pid_t *holding_pid)
 {
   char buf[LOCKFILE_BUF_LEN];
   pid_t val;
   int err;
   *holding_pid = 0;
 
-#define FAIL(x) \
-{ \
-  if (fd > 0) \
-    close (fd); \
-  return (x); \
-}
+#define FAIL(x)  \
+  {              \
+    if (fd > 0)  \
+      close(fd); \
+    return (x);  \
+  }
 
   struct flock lock;
   char *t;
@@ -58,10 +58,10 @@ Lockfile::Open(pid_t * holding_pid)
 
   // Lock it. Note that if we can't get the lock EAGAIN will be the
   // error we receive.
-  lock.l_type = F_WRLCK;
-  lock.l_start = 0;
+  lock.l_type   = F_WRLCK;
+  lock.l_start  = 0;
   lock.l_whence = SEEK_SET;
-  lock.l_len = 0;
+  lock.l_len    = 0;
 
   do {
     err = fcntl(fd, F_SETLK, &lock);
@@ -89,7 +89,7 @@ Lockfile::Open(pid_t * holding_pid)
     *t = '\0';
 
     // coverity[secure_coding]
-    if (sscanf(buf, "%d\n", (int*)&val) != 1) {
+    if (sscanf(buf, "%d\n", (int *)&val) != 1) {
       *holding_pid = 0;
     } else {
       *holding_pid = val;
@@ -118,18 +118,17 @@ Lockfile::Open(pid_t * holding_pid)
   // Return the file descriptor of the opened lockfile. When this file
   // descriptor is closed the lock will be released.
 
-  return (1);                   // success
+  return (1); // success
 
 #undef FAIL
 }
 
 int
-Lockfile::Get(pid_t * holding_pid)
+Lockfile::Get(pid_t *holding_pid)
 {
   char buf[LOCKFILE_BUF_LEN];
   int err;
   *holding_pid = 0;
-
 
   fd = -1;
 
@@ -152,18 +151,18 @@ Lockfile::Get(pid_t * holding_pid)
     return (-errno);
   }
   // Write our process id to the Lockfile.
-  snprintf(buf, sizeof(buf), "%d\n", (int) getpid());
+  snprintf(buf, sizeof(buf), "%d\n", (int)getpid());
 
   do {
     err = write(fd, buf, strlen(buf));
   } while ((err < 0) && (errno == EINTR));
 
-  if (err != (int) strlen(buf)) {
+  if (err != (int)strlen(buf)) {
     close(fd);
     return (-errno);
   }
 
-  return (1);                   // success
+  return (1); // success
 }
 
 void
@@ -205,14 +204,14 @@ lockfile_kill_internal(pid_t init_pid, int init_sig, pid_t pid, const char * /* 
     // Wait for children to exit
     do {
       err = waitpid(-1, &status, WNOHANG);
-      if (err == -1) break;
-    } while(!WIFEXITED(status) && !WIFSIGNALED(status));
+      if (err == -1)
+        break;
+    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
   }
 
   do {
     err = kill(pid, sig);
   } while ((err == 0) || ((err < 0) && (errno == EINTR)));
-
 }
 
 void
@@ -223,10 +222,10 @@ Lockfile::Kill(int sig, int initial_sig, const char *pname)
   pid_t holding_pid;
 
   err = Open(&holding_pid);
-  if (err == 1)                 // success getting the lock file
+  if (err == 1) // success getting the lock file
   {
     Close();
-  } else if (err == 0)          // someone else has the lock
+  } else if (err == 0) // someone else has the lock
   {
     pid = holding_pid;
     if (pid != 0) {
@@ -241,23 +240,31 @@ Lockfile::KillGroup(int sig, int initial_sig, const char *pname)
   int err;
   pid_t pid;
   pid_t holding_pid;
+  pid_t self = getpid();
 
   err = Open(&holding_pid);
-  if (err == 1)                 // success getting the lock file
+  if (err == 1) // success getting the lock file
   {
     Close();
-  } else if (err == 0)          // someone else has the lock
+  } else if (err == 0) // someone else has the lock
   {
     do {
       pid = getpgid(holding_pid);
     } while ((pid < 0) && (errno == EINTR));
 
-    if ((pid < 0) || (pid == getpid()))
+    if ((pid < 0) || (pid == self)) {
+      // Error getting process group,
+      // or we are the group's owner.
+      // Let's kill just holding_pid
       pid = holding_pid;
-
-    if (pid != 0) {
+    } else if (pid != self) {
+      // We managed to get holding_pid's process group
+      // and this group is not ours.
       // This way, we kill the process_group:
       pid = -pid;
+    }
+
+    if (pid != 0) {
       // In order to get core files from each process, please
       // set your core_pattern appropriately.
       lockfile_kill_internal(holding_pid, initial_sig, pid, pname, sig);

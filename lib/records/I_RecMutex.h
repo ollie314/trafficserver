@@ -24,24 +24,23 @@
 #ifndef _I_REC_MUTEX_H_
 #define _I_REC_MUTEX_H_
 
-#include "ink_mutex.h"
-#include "ink_thread.h"
+#include "ts/ink_mutex.h"
+#include "ts/ink_thread.h"
 
 /**
   A wrapper to ink_mutex class. It allows multiple acquire of mutex lock
   by the SAME thread. This is a trimmed down version of ProxyMutex.
 
 */
-struct RecMutex
-{
+struct RecMutex {
   size_t nthread_holding;
   ink_thread thread_holding;
   ink_mutex the_mutex;
 };
 
-int rec_mutex_init(RecMutex * m, const char *name = NULL);
-int rec_mutex_destroy(RecMutex * m);
-int rec_mutex_acquire(RecMutex * m);
-int rec_mutex_release(RecMutex * m);
+int rec_mutex_init(RecMutex *m, const char *name = NULL);
+int rec_mutex_destroy(RecMutex *m);
+int rec_mutex_acquire(RecMutex *m);
+int rec_mutex_release(RecMutex *m);
 
 #endif

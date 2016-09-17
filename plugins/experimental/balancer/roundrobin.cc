@@ -28,18 +28,19 @@
 #include <string>
 #include <vector>
 
-namespace {
-
-struct RoundRobinBalancer : public BalancerInstance
+namespace
 {
-  RoundRobinBalancer() : targets(), next(0) {
-  }
-
-  void push_target(const BalancerTarget& target) {
+struct RoundRobinBalancer : public BalancerInstance {
+  RoundRobinBalancer() : targets(), next(0) {}
+  void
+  push_target(const BalancerTarget &target)
+  {
     this->targets.push_back(target);
   }
 
-  const BalancerTarget& balance(TSHttpTxn, TSRemapRequestInfo *) {
+  const BalancerTarget &
+  balance(TSHttpTxn, TSRemapRequestInfo *)
+  {
     return this->targets[++next % this->targets.size()];
   }
 
@@ -50,18 +51,18 @@ struct RoundRobinBalancer : public BalancerInstance
 } // namespace
 
 BalancerInstance *
-MakeRoundRobinBalancer(const char * options)
+MakeRoundRobinBalancer(const char *options)
 {
-  RoundRobinBalancer * hash = new RoundRobinBalancer();
-  char * opt;
-  char * tmp;
+  RoundRobinBalancer *hash = new RoundRobinBalancer();
+  char *opt;
+  char *tmp;
 
   TSDebug("balancer", "making round robin balancer with options '%s'", options);
 
   if (options) {
     options = tmp = strdup(options);
     while ((opt = strsep(&tmp, ",")) != NULL) {
-      TSError("balancer: ignoring invalid round robin field '%s'", opt);
+      TSError("[balancer] Ignoring invalid round robin field '%s'", opt);
     }
 
     free((void *)options);
@@ -69,4 +70,3 @@ MakeRoundRobinBalancer(const char * options)
 
   return hash;
 }
-

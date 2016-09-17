@@ -34,13 +34,12 @@
 #include "P_Net.h"
 #endif
 
-enum INKContInternalMagic_t
-{
+enum INKContInternalMagic_t {
   INKCONT_INTERN_MAGIC_ALIVE = 0x00009631,
-  INKCONT_INTERN_MAGIC_DEAD = 0xDEAD9631
+  INKCONT_INTERN_MAGIC_DEAD  = 0xDEAD9631,
 };
 
-class INKContInternal:public DummyVConnection
+class INKContInternal : public DummyVConnection
 {
 public:
   INKContInternal();
@@ -52,6 +51,10 @@ public:
   void handle_event_count(int event);
   int handle_event(int event, void *edata);
 
+protected:
+  virtual void clear();
+  virtual void free();
+
 public:
   void *mdata;
   TSEventFunc m_event_func;
@@ -59,20 +62,17 @@ public:
   volatile int m_closed;
   int m_deletable;
   int m_deleted;
-  //INKqa07670: Nokia memory leak bug fix
+  // INKqa07670: Nokia memory leak bug fix
   INKContInternalMagic_t m_free_magic;
 };
 
-class INKVConnInternal:public INKContInternal
+class INKVConnInternal : public INKContInternal
 {
 public:
   INKVConnInternal();
   INKVConnInternal(TSEventFunc funcp, TSMutex mutexp);
 
-  void init(TSEventFunc funcp, TSMutex mutexp);
   virtual void destroy();
-
-  int handle_event(int event, void *edata);
 
   VIO *do_io_read(Continuation *c, int64_t nbytes, MIOBuffer *buf);
 
@@ -91,8 +91,12 @@ public:
   bool get_data(int id, void *data);
   bool set_data(int id, void *data);
 
+protected:
+  virtual void clear();
+  virtual void free();
+
 public:
-    VIO m_read_vio;
+  VIO m_read_vio;
   VIO m_write_vio;
   VConnection *m_output_vc;
 };
@@ -108,50 +112,17 @@ public:
  *   We now take out the mutex on each call to ensure it is
  *   held for the entire duration of the IOCore call
  ***************************************************************/
-
-//
-// FORCE_PLUGIN_MUTEX -- define 'UNSAFE_FORCE_MUTEX' if you
-// do *not* want the locking macro to be thread safe.
-// Otherwise, access during 'null-mutex' case will be serialized
-// in a locking manner (too bad for the net threads).
-//
-
-
-#define UNSAFE_FORCE_MUTEX
-
-#ifdef UNSAFE_FORCE_MUTEX
-#define LOCK_MONGO_MUTEX
-#define UNLOCK_MONGO_MUTEX
-#define MUX_WARNING(p) \
-TSDebug ("sdk","(SDK) null mutex detected in critical region (mutex created)"); \
-TSDebug ("sdk","(SDK) please create continuation [%p] with mutex", (p));
-#else
-static ink_mutex big_mux;
-
-#define MUX_WARNING(p) 1
-#define LOCK_MONGO_MUTEX   ink_mutex_acquire (&big_mux)
-#define UNLOCK_MONGO_MUTEX ink_mutex_release (&big_mux)
-#endif
-
-#define FORCE_PLUGIN_MUTEX(_c)                                          \
-  bool do_warn = false;                                                 \
-  LOCK_MONGO_MUTEX;                                                     \
-  if (( (INKContInternal*)_c)->mutex == NULL) {                         \
-    ( (INKContInternal*)_c)->mutex = new_ProxyMutex();                  \
-    do_warn = true;                                                     \
-  }                                                                     \
-  UNLOCK_MONGO_MUTEX;                                                   \
-  if (do_warn) MUX_WARNING(_c);                                         \
-  MUTEX_LOCK(ml, ((INKContInternal*)_c)->mutex, this_ethread());
+#define FORCE_PLUGIN_SCOPED_MUTEX(_c)         \
+  sdk_assert(((INKContInternal *)_c)->mutex); \
+  SCOPED_MUTEX_LOCK(ml, ((INKContInternal *)_c)->mutex, this_ethread());
 
 #ifdef __cplusplus
-extern "C"
-{
-#endif                          /* __cplusplus */
+extern "C" {
+#endif /* __cplusplus */
 
-  TSReturnCode sdk_sanity_check_mutex(TSMutex);
-  TSReturnCode sdk_sanity_check_hostlookup_structure(TSHostLookupResult);
-  TSReturnCode sdk_sanity_check_iocore_structure(void *);
+TSReturnCode sdk_sanity_check_mutex(TSMutex);
+TSReturnCode sdk_sanity_check_hostlookup_structure(TSHostLookupResult);
+TSReturnCode sdk_sanity_check_iocore_structure(void *);
 
 /* ----------------------------------------------------------------------
  *
@@ -159,78 +130,77 @@ extern "C"
  *
  * ---------------------------------------------------------------------- */
 
-  tsapi TSMutex TSMutexCreateInternal(void);
-  tsapi int TSMutexCheck(TSMutex mutex);
-
+tsapi TSMutex TSMutexCreateInternal(void);
+tsapi int TSMutexCheck(TSMutex mutex);
 
 /* IOBuffer */
-  tsapi void TSIOBufferReaderCopy(TSIOBufferReader readerp, const void *buf, int64_t length);
-  tsapi int64_t TSIOBufferBlockDataSizeGet(TSIOBufferBlock blockp);
-  tsapi void TSIOBufferBlockDestroy(TSIOBufferBlock blockp);
-  typedef void *INKUDPPacket;
-  typedef void *INKUDPacketQueue;
-  typedef void *INKUDPConn;
+tsapi void TSIOBufferReaderCopy(TSIOBufferReader readerp, const void *buf, int64_t length);
+tsapi int64_t TSIOBufferBlockDataSizeGet(TSIOBufferBlock blockp);
+tsapi void TSIOBufferBlockDestroy(TSIOBufferBlock blockp);
+typedef void *INKUDPPacket;
+typedef void *INKUDPacketQueue;
+typedef void *INKUDPConn;
 /* ===== UDP Connections ===== */
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi TSAction INKUDPBind(TSCont contp, unsigned int ip, int port);
+tsapi TSAction INKUDPBind(TSCont contp, unsigned int ip, int port);
 
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi TSAction INKUDPSendTo(TSCont contp, INKUDPConn udp, unsigned int ip, int port, char *buf, int len);
+tsapi TSAction INKUDPSendTo(TSCont contp, INKUDPConn udp, unsigned int ip, int port, char *buf, int len);
 
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi TSAction INKUDPRecvFrom(TSCont contp, INKUDPConn udp);
+tsapi TSAction INKUDPRecvFrom(TSCont contp, INKUDPConn udp);
 
 /****************************************************************************
  *  Return file descriptor.
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi int INKUDPConnFdGet(INKUDPConn udp);
+tsapi int INKUDPConnFdGet(INKUDPConn udp);
 
 /* ===== UDP Packet ===== */
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi INKUDPPacket INKUDPPacketCreate();
+tsapi INKUDPPacket INKUDPPacketCreate();
 
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi TSIOBufferBlock INKUDPPacketBufferBlockGet(INKUDPPacket packet);
+tsapi TSIOBufferBlock INKUDPPacketBufferBlockGet(INKUDPPacket packet);
 
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi unsigned int INKUDPPacketFromAddressGet(INKUDPPacket packet);
+tsapi unsigned int INKUDPPacketFromAddressGet(INKUDPPacket packet);
 
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi int INKUDPPacketFromPortGet(INKUDPPacket packet);
+tsapi int INKUDPPacketFromPortGet(INKUDPPacket packet);
 
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi INKUDPConn INKUDPPacketConnGet(INKUDPPacket packet);
+tsapi INKUDPConn INKUDPPacketConnGet(INKUDPPacket packet);
 
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi void INKUDPPacketDestroy(INKUDPPacket packet);
+tsapi void INKUDPPacketDestroy(INKUDPPacket packet);
 
 /* ===== Packet Queue ===== */
 /****************************************************************************
  *  contact: OXYGEN
  ****************************************************************************/
-  tsapi INKUDPPacket INKUDPPacketGet(INKUDPacketQueue queuep);
+tsapi INKUDPPacket INKUDPPacketGet(INKUDPacketQueue queuep);
 
 #ifdef __cplusplus
 }
-#endif                          /* __cplusplus */
+#endif /* __cplusplus */
 
-#endif                          /* __INK_API_PRIVATE_IOCORE_H__ */
+#endif /* __INK_API_PRIVATE_IOCORE_H__ */

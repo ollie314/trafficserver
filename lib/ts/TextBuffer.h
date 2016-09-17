@@ -32,33 +32,47 @@
  *
  ****************************************************************************/
 
-#include "ink_platform.h"
-#include "ink_apidefs.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_apidefs.h"
 
 class textBuffer
 {
 public:
   inkcoreapi textBuffer(int size);
-  inkcoreapi ~ textBuffer();
+  inkcoreapi ~textBuffer();
   int rawReadFromFile(int fd);
   int readFromFD(int fd);
   inkcoreapi int copyFrom(const void *, unsigned num_bytes);
   void reUse();
   inkcoreapi char *bufPtr();
 
-  void clear() { this->reUse(); }
-  void resize(unsigned nbytes) { this->enlargeBuffer(nbytes); }
+  void
+  clear()
+  {
+    this->reUse();
+  }
+  void
+  resize(unsigned nbytes)
+  {
+    this->enlargeBuffer(nbytes);
+  }
 
-  size_t spaceUsed() const {
-    return (size_t) (nextAdd - bufferStart);
+  size_t
+  spaceUsed() const
+  {
+    return (size_t)(nextAdd - bufferStart);
   };
 
   void chomp();
   void slurp(int);
-  bool empty() const { return this->spaceUsed() == 0; }
-  void format(const char * fmt, ...) TS_PRINTFLIKE(2, 3);
+  bool
+  empty() const
+  {
+    return this->spaceUsed() == 0;
+  }
+  void format(const char *fmt, ...) TS_PRINTFLIKE(2, 3);
 
-  char * release();
+  char *release();
 
 private:
   textBuffer(const textBuffer &);

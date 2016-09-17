@@ -33,18 +33,20 @@
 #include "net/instaweb/util/public/pthread_rw_lock.h"
 #include "net/instaweb/util/public/condvar.h"
 
-namespace net_instaweb {
-
-class AtsThreadSystem : public net_instaweb::SystemThreadSystem {
- public:
-  virtual void BeforeThreadRunHook() {
+namespace net_instaweb
+{
+class AtsThreadSystem : public net_instaweb::SystemThreadSystem
+{
+public:
+  virtual void
+  BeforeThreadRunHook()
+  {
     TSThreadInit();
   }
 
-  virtual ~AtsThreadSystem() { }
+  virtual ~AtsThreadSystem() {}
 };
 
 } // net_instaweb
-
 
 #endif // ATS_THREAD_SYSTEM_H_

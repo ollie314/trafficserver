@@ -38,57 +38,60 @@
 
 #include "MgmtUtils.h"
 #include "BaseManager.h"
-#include "ink_sock.h"
+#include "ts/ink_sock.h"
 
-#include "ink_apidefs.h"
+#include "ts/ink_apidefs.h"
 
 class ConfigUpdateCbTable;
 
 void *startProcessManager(void *arg);
-class ProcessManager:public BaseManager
+class ProcessManager : public BaseManager
 {
-
 public:
   ProcessManager(bool rlm);
   ~ProcessManager()
   {
     close_socket(local_manager_sockfd);
     while (!queue_is_empty(mgmt_signal_queue)) {
-      char *sig = (char *) dequeue(mgmt_signal_queue);
+      char *sig = (char *)dequeue(mgmt_signal_queue);
       ats_free(sig);
     }
     ats_free(mgmt_signal_queue);
   }
 
-  void start()
+  void
+  start()
   {
     ink_thread_create(startProcessManager, 0);
   }
 
-  void stop()
+  void
+  stop()
   {
-    mgmt_log(stderr, "[ProcessManager::stop] Bringing down connection\n");
+    mgmt_log("[ProcessManager::stop] Bringing down connection\n");
     close_socket(local_manager_sockfd);
   }
 
+  inkcoreapi void signalConfigFileChild(const char *parent, const char *child, unsigned int options);
   inkcoreapi void signalManager(int msg_id, const char *data_str);
   inkcoreapi void signalManager(int msg_id, const char *data_raw, int data_len);
 
   void reconfigure();
   void initLMConnection();
   void pollLMConnection();
-  void handleMgmtMsgFromLM(MgmtMessageHdr * mh);
+  void handleMgmtMsgFromLM(MgmtMessageHdr *mh);
 
   bool processEventQueue();
   bool processSignalQueue();
 
-  void registerPluginCallbacks(ConfigUpdateCbTable * _cbtable) {
+  void
+  registerPluginCallbacks(ConfigUpdateCbTable *_cbtable)
+  {
     cbtable = _cbtable;
   }
 
   bool require_lm;
   time_t timeout;
-  int mgmt_sync_key;
 
   LLQ *mgmt_signal_queue;
 
@@ -97,8 +100,11 @@ public:
   int local_manager_sockfd;
 
 private:
-  ConfigUpdateCbTable * cbtable;
-};                              /* End class ProcessManager */
+  static const int MAX_MSGS_IN_A_ROW = 10000;
+
+  ConfigUpdateCbTable *cbtable;
+  int max_msgs_in_a_row;
+}; /* End class ProcessManager */
 
 inkcoreapi extern ProcessManager *pmgmt;
 

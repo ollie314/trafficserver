@@ -23,13 +23,11 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "ink_thread.h"
-#include "ink_queue.h"
-
+#include "ts/ink_thread.h"
+#include "ts/ink_queue.h"
 
 #define NTHREADS 64
 InkFreeList *flist = NULL;
-
 
 void *
 test(void *d)
@@ -37,18 +35,18 @@ test(void *d)
   int id;
   void *m1, *m2, *m3;
 
-  id = (intptr_t) d;
+  id = (intptr_t)d;
 
   time_t start = time(NULL);
-  int count = 0;
+  int count    = 0;
   for (;;) {
     m1 = ink_freelist_new(flist);
     m2 = ink_freelist_new(flist);
     m3 = ink_freelist_new(flist);
 
     if ((m1 == m2) || (m1 == m3) || (m2 == m3)) {
-      printf("0x%08" PRIx64 "   0x%08" PRIx64 "   0x%08" PRIx64 "\n",
-             (uint64_t)(uintptr_t)m1, (uint64_t)(uintptr_t)m2, (uint64_t)(uintptr_t)m3);
+      printf("0x%08" PRIx64 "   0x%08" PRIx64 "   0x%08" PRIx64 "\n", (uint64_t)(uintptr_t)m1, (uint64_t)(uintptr_t)m2,
+             (uint64_t)(uintptr_t)m3);
       exit(1);
     }
 
@@ -65,12 +63,10 @@ test(void *d)
       return NULL;
     }
   }
-
 }
 
-
 int
-main(int /* argc ATS_UNUSED */, char */*argv ATS_UNUSED */[])
+main(int /* argc ATS_UNUSED */, char * /*argv ATS_UNUSED */ [])
 {
   int i;
 
@@ -81,7 +77,7 @@ main(int /* argc ATS_UNUSED */, char */*argv ATS_UNUSED */[])
     ink_thread_create(test, (void *)((intptr_t)i));
   }
 
-  test((void *) NTHREADS);
+  test((void *)NTHREADS);
 
   return 0;
 }

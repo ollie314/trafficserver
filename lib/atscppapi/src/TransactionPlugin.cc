@@ -20,12 +20,12 @@
  * @file TransactionPlugin.cc
  */
 
-#include "atscppapi/TransactionPlugin.h"
-#include <ts/ts.h>
+#include <memory>
 #include <cstddef>
 #include <cassert>
+#include <ts/ts.h>
+#include "atscppapi/TransactionPlugin.h"
 #include "atscppapi/Mutex.h"
-#include "atscppapi/shared_ptr.h"
 #include "utils_internal.h"
 #include "atscppapi/noncopyable.h"
 #include "logging_internal.h"
@@ -36,18 +36,19 @@ using atscppapi::TransactionPlugin;
 /**
  * @private
  */
-struct atscppapi::TransactionPluginState: noncopyable {
+struct atscppapi::TransactionPluginState : noncopyable {
   TSCont cont_;
   TSHttpTxn ats_txn_handle_;
-  shared_ptr<Mutex> mutex_;
-  TransactionPluginState(TSHttpTxn ats_txn_handle) : ats_txn_handle_(ats_txn_handle),
-                                                     mutex_(new Mutex(Mutex::TYPE_RECURSIVE)) { }
+  std::shared_ptr<Mutex> mutex_;
+  TransactionPluginState(TSHttpTxn ats_txn_handle) : ats_txn_handle_(ats_txn_handle), mutex_(new Mutex(Mutex::TYPE_RECURSIVE)) {}
 };
 
-namespace {
-
-static int handleTransactionPluginEvents(TSCont cont, TSEvent event, void *edata) {
-  TSHttpTxn txn = static_cast<TSHttpTxn>(edata);
+namespace
+{
+static int
+handleTransactionPluginEvents(TSCont cont, TSEvent event, void *edata)
+{
+  TSHttpTxn txn             = static_cast<TSHttpTxn>(edata);
   TransactionPlugin *plugin = static_cast<TransactionPlugin *>(TSContDataGet(cont));
   LOG_DEBUG("cont=%p, event=%d, tshttptxn=%p, plugin=%p", cont, event, edata, plugin);
   atscppapi::utils::internal::invokePluginForEvent(plugin, txn, event);
@@ -56,28 +57,33 @@ static int handleTransactionPluginEvents(TSCont cont, TSEvent event, void *edata
 
 } /* anonymous namespace */
 
-TransactionPlugin::TransactionPlugin(Transaction &transaction) {
-  state_ = new TransactionPluginState(static_cast<TSHttpTxn>(transaction.getAtsHandle()));
+TransactionPlugin::TransactionPlugin(Transaction &transaction)
+{
+  state_        = new TransactionPluginState(static_cast<TSHttpTxn>(transaction.getAtsHandle()));
   TSMutex mutex = NULL;
   state_->cont_ = TSContCreate(handleTransactionPluginEvents, mutex);
   TSContDataSet(state_->cont_, static_cast<void *>(this));
-  LOG_DEBUG("Creating new TransactionPlugin=%p tshttptxn=%p, cont=%p", this, state_->ats_txn_handle_,
-            state_->cont_);
+  LOG_DEBUG("Creating new TransactionPlugin=%p tshttptxn=%p, cont=%p", this, state_->ats_txn_handle_, state_->cont_);
 }
 
-shared_ptr<Mutex> TransactionPlugin::getMutex() {
+std::shared_ptr<Mutex>
+TransactionPlugin::getMutex()
+{
   return state_->mutex_;
 }
 
-TransactionPlugin::~TransactionPlugin() {
+TransactionPlugin::~TransactionPlugin()
+{
   LOG_DEBUG("Destroying TransactionPlugin=%p", this);
   TSContDestroy(state_->cont_);
   delete state_;
 }
 
-void TransactionPlugin::registerHook(Plugin::HookType hook_type) {
-  LOG_DEBUG("TransactionPlugin=%p tshttptxn=%p registering hook_type=%d [%s]", this, state_->ats_txn_handle_,
-            hook_type, HOOK_TYPE_STRINGS[hook_type].c_str());
+void
+TransactionPlugin::registerHook(Plugin::HookType hook_type)
+{
+  LOG_DEBUG("TransactionPlugin=%p tshttptxn=%p registering hook_type=%d [%s]", this, state_->ats_txn_handle_, hook_type,
+            HOOK_TYPE_STRINGS[hook_type].c_str());
   TSHttpHookID hook_id = atscppapi::utils::internal::convertInternalHookToTsHook(hook_type);
   TSHttpTxnHookAdd(state_->ats_txn_handle_, hook_id, state_->cont_);
 }

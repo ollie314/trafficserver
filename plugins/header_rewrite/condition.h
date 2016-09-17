@@ -31,18 +31,16 @@
 #include "matcher.h"
 #include "parser.h"
 
-
 // Condition modifiers
 enum CondModifiers {
-  COND_NONE = 0,
-  COND_OR = 1,
-  COND_AND = 2,
-  COND_NOT = 4,
+  COND_NONE   = 0,
+  COND_OR     = 1,
+  COND_AND    = 2,
+  COND_NOT    = 4,
   COND_NOCASE = 8, // Not implemented
-  COND_LAST = 16,
-  COND_CHAIN = 32  // Not implemented
+  COND_LAST   = 16,
+  COND_CHAIN  = 32 // Not implemented
 };
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // Base class for all Conditions (this is also the interface)
@@ -50,29 +48,31 @@ enum CondModifiers {
 class Condition : public Statement
 {
 public:
-  Condition()
-    : _qualifier(""), _cond_op(MATCH_EQUAL), _matcher(NULL), _mods(COND_NONE)
+  Condition() : _qualifier(""), _cond_op(MATCH_EQUAL), _matcher(NULL), _mods(COND_NONE)
   {
     TSDebug(PLUGIN_NAME_DBG, "Calling CTOR for Condition");
   }
 
   // Inline this, it's critical for speed (and only used twice)
-  bool do_eval(const Resources& res)
+  bool
+  do_eval(const Resources &res)
   {
     bool rt = eval(res);
 
-    if (_mods & COND_NOT)
+    if (_mods & COND_NOT) {
       rt = !rt;
+    }
 
     if (_next) {
       if (_mods & COND_OR) {
-        return rt || (static_cast<Condition*>(_next)->do_eval(res));
+        return rt || (static_cast<Condition *>(_next)->do_eval(res));
       } else { // AND is the default
         // Short circuit if we're an AND and the first condition is FALSE.
-        if (rt)
-          return static_cast<Condition*>(_next)->do_eval(res);
-        else
+        if (rt) {
+          return static_cast<Condition *>(_next)->do_eval(res);
+        } else {
           return false;
+        }
       }
     } else {
       return rt;
@@ -81,29 +81,49 @@ public:
     return false; // Shouldn't happen.
   }
 
-  bool last() const {
+  bool
+  last() const
+  {
     return _mods & COND_LAST;
   }
 
   // Setters
-  virtual void set_qualifier(const std::string& q) { _qualifier = q; }
+  virtual void
+  set_qualifier(const std::string &q)
+  {
+    _qualifier = q;
+  }
 
   // Some getters
-  const Matcher* get_matcher() const { return _matcher; }
-  const MatcherOps get_cond_op() const { return _cond_op; }
-  const std::string get_qualifier() const { return _qualifier; }
+  const Matcher *
+  get_matcher() const
+  {
+    return _matcher;
+  }
+
+  const MatcherOps
+  get_cond_op() const
+  {
+    return _cond_op;
+  }
+
+  const std::string
+  get_qualifier() const
+  {
+    return _qualifier;
+  }
 
   // Virtual methods, has to be implemented by each conditional;
-  virtual void initialize(Parser& p);
-  virtual void append_value(std::string& s, const Resources& res) = 0;
+  virtual void initialize(Parser &p);
+  virtual void append_value(std::string &s, const Resources &res) = 0;
 
 protected:
   // Evaluate the condition
-  virtual bool eval(const Resources& res) = 0;
+  virtual bool eval(const Resources &res) = 0;
 
   std::string _qualifier;
   MatcherOps _cond_op;
-  Matcher* _matcher;
+  Matcher *_matcher;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(Condition);
@@ -111,6 +131,4 @@ private:
   CondModifiers _mods;
 };
 
-
 #endif // __CONDITION_H
-

@@ -31,21 +31,18 @@ dist_sysconf_DATA =	\
   cluster.config.default \
   congestion.config.default \
   hosting.config.default \
-  icp.config.default \
   ip_allow.config.default \
   log_hosts.config.default \
-  logs_xml.config.default \
+  logging.config.default \
+  metrics.config.default \
   parent.config.default \
-  volume.config.default \
   plugin.config.default \
-  prefetch.config.default \
   remap.config.default \
   socks.config.default \
   splitdns.config.default \
   ssl_multicert.config.default \
-  stats.config.xml.default \
-  update.config.default \
-  vaddrs.config.default
+  vaddrs.config.default \
+  volume.config.default
 
 install-exec-hook:
 	for dfltcfgfile in $(dist_sysconf_DATA) $(nodist_sysconf_DATA) ; \

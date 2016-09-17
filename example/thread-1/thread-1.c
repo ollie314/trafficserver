@@ -35,12 +35,12 @@
 #include <string.h>
 
 #include "ts/ts.h"
-#include "ink_defs.h"
+#include "ts/ink_defs.h"
 
 static void *
 reenable_txn(void *data)
 {
-  TSHttpTxn txnp = (TSHttpTxn) data;
+  TSHttpTxn txnp = (TSHttpTxn)data;
   TSHttpTxnReenable(txnp, TS_EVENT_HTTP_CONTINUE);
   return NULL;
 }
@@ -50,10 +50,10 @@ thread_plugin(TSCont contp ATS_UNUSED, TSEvent event, void *edata)
 {
   switch (event) {
   case TS_EVENT_HTTP_OS_DNS:
-      /**
-       * Check if the thread has been created successfully or not.
-       * If the thread has not been created successfully, assert.
-       */
+    /**
+     * Check if the thread has been created successfully or not.
+     * If the thread has not been created successfully, assert.
+     */
     if (!TSThreadCreate(reenable_txn, edata)) {
       TSReleaseAssert(!"Failure in thread creation");
     }
@@ -64,18 +64,17 @@ thread_plugin(TSCont contp ATS_UNUSED, TSEvent event, void *edata)
   return 0;
 }
 
-
 void
 TSPluginInit(int argc ATS_UNUSED, const char *argv[] ATS_UNUSED)
 {
   TSPluginRegistrationInfo info;
 
-  info.plugin_name = "thread-1";
-  info.vendor_name = "MyCompany";
+  info.plugin_name   = "thread-1";
+  info.vendor_name   = "MyCompany";
   info.support_email = "ts-api-support@MyCompany.com";
 
-  if (TSPluginRegister(TS_SDK_VERSION_3_0, &info) != TS_SUCCESS) {
-    TSError("Plugin registration failed.\n");
+  if (TSPluginRegister(&info) != TS_SUCCESS) {
+    TSError("[thread-1] Plugin registration failed.");
   }
 
   TSHttpHookAdd(TS_HTTP_OS_DNS_HOOK, TSContCreate(thread_plugin, NULL));

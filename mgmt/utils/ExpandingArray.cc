@@ -21,13 +21,12 @@
   limitations under the License.
  */
 
-#include "ink_platform.h"
-#include "ink_memory.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_memory.h"
 #include "ExpandingArray.h"
 
 ExpandingArray::ExpandingArray(int initialSize, bool freeContents)
 {
-
   if (initialSize < EA_MIN_SIZE) {
     initialSize = EA_MIN_SIZE;
   }
@@ -35,13 +34,12 @@ ExpandingArray::ExpandingArray(int initialSize, bool freeContents)
   internalArray = (void **)ats_malloc(initialSize * sizeof(void *));
 
   freeContentsOnDestruct = freeContents;
-  internalArraySize = initialSize;
-  numValidValues = 0;
+  internalArraySize      = initialSize;
+  numValidValues         = 0;
 }
 
 ExpandingArray::~ExpandingArray()
 {
-
   if (freeContentsOnDestruct == true) {
     for (int i = 0; i < numValidValues; i++) {
       ats_free(internalArray[i]);
@@ -50,10 +48,8 @@ ExpandingArray::~ExpandingArray()
   ats_free(internalArray);
 }
 
-void *
-ExpandingArray::operator [] (int index)
+void *ExpandingArray::operator[](int index)
 {
-
   if (index < numValidValues) {
     return internalArray[index];
   } else {
@@ -64,7 +60,6 @@ ExpandingArray::operator [] (int index)
 int
 ExpandingArray::addEntry(void *entry)
 {
-
   if (numValidValues == internalArraySize) {
     // Time to increase the size of the array
     internalArray = (void **)ats_realloc(internalArray, 2 * sizeof(void *) * internalArraySize);
@@ -77,7 +72,7 @@ ExpandingArray::addEntry(void *entry)
 }
 
 void
-ExpandingArray::sortWithFunction(int (sortFunc) (const void *, const void *))
+ExpandingArray::sortWithFunction(int(sortFunc)(const void *, const void *))
 {
   qsort(internalArray, numValidValues, sizeof(void *), sortFunc);
 }

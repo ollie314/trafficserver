@@ -26,32 +26,56 @@
 #include <vector>
 #include <algorithm>
 
+#include "ts/ts.h"
 #include "lulu.h"
-
 
 ///////////////////////////////////////////////////////////////////////////////
 //
 class Parser
 {
 public:
-  explicit Parser(const std::string& line);
+  explicit Parser(const std::string &line);
 
-  bool empty() const { return _empty; }
-  bool is_cond() const { return _cond; }
+  bool
+  empty() const
+  {
+    return _empty;
+  }
 
-  bool cond_op_is(const std::string s) const { return _cond && (_op == s); }
-  bool oper_op_is(const std::string s) const { return !_cond && (_op == s); }
+  bool
+  is_cond() const
+  {
+    return _cond;
+  }
 
-  const std::string& get_op() const { return _op; }
-  std::string& get_arg() { return _arg; }
-  const std::string& get_value() const { return _val; }
+  const std::string &
+  get_op() const
+  {
+    return _op;
+  }
 
-  bool mod_exist(const std::string m) const {
+  std::string &
+  get_arg()
+  {
+    return _arg;
+  }
+
+  const std::string &
+  get_value() const
+  {
+    return _val;
+  }
+
+  bool
+  mod_exist(const std::string m) const
+  {
     return (std::find(_mods.begin(), _mods.end(), m) != _mods.end());
   }
 
+  bool cond_is_hook(TSHttpHookID &hook) const;
+
 private:
-  void preprocess(std::vector<std::string>& tokens);
+  void preprocess(std::vector<std::string> tokens);
   DISALLOW_COPY_AND_ASSIGN(Parser);
 
   bool _cond;
@@ -60,7 +84,9 @@ private:
   std::string _op;
   std::string _arg;
   std::string _val;
-};
 
+protected:
+  std::vector<std::string> _tokens;
+};
 
 #endif // __PARSER_H

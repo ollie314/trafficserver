@@ -16,21 +16,26 @@
   limitations under the License.
  */
 
-
 #include <iostream>
 #include <atscppapi/GlobalPlugin.h>
 #include <atscppapi/PluginInit.h>
 
-class HelloWorldPlugin : public atscppapi::GlobalPlugin {
-public:
-  HelloWorldPlugin() {
-    std::cout << "Hello World!" << std::endl;
-  }
-};
-
-void TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED) {
-  std::cout << "Hello from " << argv[0] << std::endl;
-  new HelloWorldPlugin();
+using namespace atscppapi;
+namespace
+{
+GlobalPlugin *plugin;
 }
 
+class HelloWorldPlugin : public atscppapi::GlobalPlugin
+{
+public:
+  HelloWorldPlugin() { std::cout << "Hello World!" << std::endl; }
+};
 
+void
+TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED)
+{
+  std::cout << "Hello from " << argv[0] << std::endl;
+  atscppapi::RegisterGlobalPlugin("CPP_Example_HelloWorld", "apache", "dev@trafficserver.apache.org");
+  plugin = new HelloWorldPlugin();
+}

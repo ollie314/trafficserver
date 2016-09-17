@@ -16,7 +16,6 @@
   limitations under the License.
  */
 
-
 #include <atscppapi/GlobalPlugin.h>
 #include <atscppapi/Logger.h>
 #include <atscppapi/PluginInit.h>
@@ -25,41 +24,60 @@
 using namespace atscppapi;
 using std::string;
 
+namespace
+{
+GlobalPlugin *plugin;
+GlobalPlugin *plugin2;
+}
+
 #define TAG "internal_transaction_handling"
 
-class AllTransactionsGlobalPlugin : public GlobalPlugin {
+class AllTransactionsGlobalPlugin : public GlobalPlugin
+{
 public:
-  AllTransactionsGlobalPlugin() : GlobalPlugin() {
+  AllTransactionsGlobalPlugin() : GlobalPlugin()
+  {
     TS_DEBUG(TAG, "Registering a global hook HOOK_READ_REQUEST_HEADERS_POST_REMAP");
     registerHook(HOOK_READ_REQUEST_HEADERS_POST_REMAP);
   }
 
-  virtual void handleReadRequestHeadersPostRemap(Transaction &transaction) {
+  virtual void
+  handleReadRequestHeadersPostRemap(Transaction &transaction)
+  {
     TS_DEBUG(TAG, "Received a request in handleReadRequestHeadersPostRemap.");
     transaction.resume();
   }
 };
 
-class NoInternalTransactionsGlobalPlugin : public GlobalPlugin, public AsyncReceiver<AsyncHttpFetch> {
+class NoInternalTransactionsGlobalPlugin : public GlobalPlugin, public AsyncReceiver<AsyncHttpFetch>
+{
 public:
-  NoInternalTransactionsGlobalPlugin() : GlobalPlugin(true) {
+  NoInternalTransactionsGlobalPlugin() : GlobalPlugin(true)
+  {
     TS_DEBUG(TAG, "Registering a global hook HOOK_READ_REQUEST_HEADERS_POST_REMAP");
     registerHook(HOOK_READ_REQUEST_HEADERS_POST_REMAP);
   }
 
-  virtual void handleReadRequestHeadersPostRemap(Transaction &transaction) {
+  virtual void
+  handleReadRequestHeadersPostRemap(Transaction &transaction)
+  {
     TS_DEBUG(TAG, "Received a request in handleReadRequestHeadersPostRemap.");
-    shared_ptr<Mutex> mutex(new Mutex()); // required for async operation
+    std::shared_ptr<Mutex> mutex(new Mutex());                                            // required for async operation
     Async::execute<AsyncHttpFetch>(this, new AsyncHttpFetch("http://127.0.0.1/"), mutex); // internal transaction
     transaction.resume();
   }
 
-  void handleAsyncComplete(AsyncHttpFetch &provider ATSCPPAPI_UNUSED) {
+  void
+  handleAsyncComplete(AsyncHttpFetch &provider ATSCPPAPI_UNUSED)
+  {
   }
 };
 
-void TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED) {
+void
+TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED)
+{
+  RegisterGlobalPlugin("CPP_Example_InternalTransactionHandling", "apache", "dev@trafficserver.apache.org");
   TS_DEBUG(TAG, "Loaded async_http_fetch_example plugin");
-  new AllTransactionsGlobalPlugin();
-  new NoInternalTransactionsGlobalPlugin();
+  plugin  = new AllTransactionsGlobalPlugin();
+  plugin2 = new NoInternalTransactionsGlobalPlugin();
 }

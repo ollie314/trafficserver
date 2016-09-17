@@ -35,7 +35,6 @@ class LogCollationClientSM;
   -------------------------------------------------------------------------*/
 class LogHost
 {
-
   friend class LogCollationClientSM;
 
 public:
@@ -43,9 +42,9 @@ public:
   LogHost(const LogHost &);
   ~LogHost();
 
-  int set_name_or_ipstr(char *name_or_ipstr);
-  int set_ipstr_port(char *ipstr, unsigned int port);
-  int set_name_port(char *hostname, unsigned int port);
+  bool set_name_or_ipstr(const char *name_or_ipstr);
+  bool set_ipstr_port(const char *ipstr, unsigned int port);
+  bool set_name_port(const char *hostname, unsigned int port);
 
   bool connected(bool ping);
   bool connect();
@@ -54,34 +53,67 @@ public:
   // preprocess the given buffer data before sent to target host
   // and try to delete it when its reference become zero.
   //
-  int preproc_and_try_delete(LogBuffer * lb);
+  int preproc_and_try_delete(LogBuffer *lb);
 
   //
-  // write the given buffer data to orhpan file and
+  // write the given buffer data to orphan file and
   // try to delete it when its reference become zero.
   //
-  void orphan_write_and_try_delete(LogBuffer * lb);
+  void orphan_write_and_try_delete(LogBuffer *lb);
 
-  char const* name() const { return m_name ? m_name : "UNKNOWN"; }
-  IpAddr const& ip_addr() const { return m_ip; }
-  in_port_t port() const { return m_port; }
-  char const* ipstr() const { return m_ipstr; }
+  const char *
+  name() const
+  {
+    return m_name ? m_name : "UNKNOWN";
+  }
 
-  void display(FILE * fd = stdout);
+  uint64_t
+  signature() const
+  {
+    return m_object_signature;
+  }
 
-  LogFile *get_orphan_logfile() const { return m_orphan_file; }
+  IpAddr const &
+  ip_addr() const
+  {
+    return m_ip;
+  }
+
+  in_port_t
+  port() const
+  {
+    return m_port;
+  }
+
+  char const *
+  ipstr() const
+  {
+    return m_ipstr;
+  }
+
+  void display(FILE *fd = stdout);
+
+  LogFile *
+  get_orphan_logfile() const
+  {
+    return m_orphan_file.get();
+  }
+
   // check if we will be able to write orphan file
-  int do_filesystem_checks() { return m_orphan_file->do_filesystem_checks(); }
+  int
+  do_filesystem_checks()
+  {
+    return m_orphan_file->do_filesystem_checks();
+  }
 
 private:
   void clear();
   bool authenticated();
-  void create_orphan_LogFile_object();
 
 private:
   char *m_object_filename;
   uint64_t m_object_signature;
-  IpAddr m_ip; // IP address, network order.
+  IpAddr m_ip;      // IP address, network order.
   in_port_t m_port; // IP port, host order.
   ip_text_buffer m_ipstr;
   char *m_name;
@@ -98,28 +130,37 @@ public:
 private:
   // -- member functions not allowed --
   LogHost();
-  LogHost & operator=(const LogHost &);
+  LogHost &operator=(const LogHost &);
 };
 
 /*-------------------------------------------------------------------------
   LogHostList
   -------------------------------------------------------------------------*/
-class LogHostList:public LogBufferSink
+class LogHostList : public LogBufferSink
 {
 public:
   LogHostList();
   ~LogHostList();
 
-  void add(LogHost * host, bool copy = true);
+  void add(LogHost *host, bool copy = true);
   unsigned count();
   void clear();
-  int preproc_and_try_delete(LogBuffer * lb);
+  int preproc_and_try_delete(LogBuffer *lb);
 
-  LogHost *first() { return m_host_list.head; }
-  LogHost *next(LogHost * here) { return (here->link).next; }
+  LogHost *
+  first()
+  {
+    return m_host_list.head;
+  }
 
-  void display(FILE * fd = stdout);
-  bool operator==(LogHostList & rhs);
+  LogHost *
+  next(LogHost *here)
+  {
+    return (here->link).next;
+  }
+
+  void display(FILE *fd = stdout);
+  bool operator==(LogHostList &rhs);
   int do_filesystem_checks();
 
 private:
@@ -127,7 +168,7 @@ private:
 
   // -- member functions not allowed --
   LogHostList(const LogHostList &);
-  LogHostList & operator=(const LogHostList &);
+  LogHostList &operator=(const LogHostList &);
 };
 
 #endif

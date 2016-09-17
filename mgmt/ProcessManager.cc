@@ -21,16 +21,16 @@
   limitations under the License.
  */
 
+#include "ts/ink_platform.h"
 
-#include "libts.h"
 #undef HTTP_CACHE
 #include "InkAPIInternal.h"
 #include "MgmtUtils.h"
 #include "ProcessManager.h"
 
-#include "ink_apidefs.h"
+#include "ts/ink_apidefs.h"
 #include "MgmtSocket.h"
-#include "I_Layout.h"
+#include "ts/I_Layout.h"
 
 /*
  * Global ProcessManager
@@ -46,15 +46,18 @@ startProcessManager(void *arg)
 {
   void *ret = arg;
 
-  while (!pmgmt) {              /* Avert race condition, thread spun during constructor */
-    Debug("pmgmt", "[startProcessManager] Waiting for initialization of object...\n");
+  while (!pmgmt) { /* Avert race condition, thread spun during constructor */
+    Debug("pmgmt", "[startProcessManager] Waiting for initialization of object...");
     mgmt_sleep_sec(1);
   }
-  if (pmgmt->require_lm) {      /* Allow p. process to run w/o a lm */
+  if (pmgmt->require_lm) { /* Allow p. process to run w/o a lm */
     pmgmt->initLMConnection();
   }
 
   for (;;) {
+    if (unlikely(shutdown_event_system == true)) {
+      return NULL;
+    }
     if (pmgmt->require_lm) {
       pmgmt->pollLMConnection();
     }
@@ -63,10 +66,10 @@ startProcessManager(void *arg)
     mgmt_sleep_sec(pmgmt->timeout);
   }
   return ret;
-}                               /* End startProcessManager */
+} /* End startProcessManager */
 
-ProcessManager::ProcessManager(bool rlm):
-BaseManager(), require_lm(rlm), mgmt_sync_key(0), local_manager_sockfd(0), cbtable(NULL)
+ProcessManager::ProcessManager(bool rlm)
+  : BaseManager(), require_lm(rlm), local_manager_sockfd(0), cbtable(NULL), max_msgs_in_a_row(1)
 {
   mgmt_signal_queue = create_queue();
 
@@ -74,44 +77,55 @@ BaseManager(), require_lm(rlm), mgmt_sync_key(0), local_manager_sockfd(0), cbtab
   // Making the process_manager thread a spinning thread to start traffic server
   // as quickly as possible. Will reset this timeout when reconfigure()
   timeout = 0;
-  pid = getpid();
-}                               /* End ProcessManager::ProcessManager */
-
+  pid     = getpid();
+} /* End ProcessManager::ProcessManager */
 
 void
 ProcessManager::reconfigure()
 {
   bool found;
-  timeout = REC_readInteger("proxy.config.process_manager.timeout", &found);
+  max_msgs_in_a_row = MAX_MSGS_IN_A_ROW;
+  timeout           = REC_readInteger("proxy.config.process_manager.timeout", &found);
   ink_assert(found);
 
   return;
-}                               /* End ProcessManager::reconfigure */
+} /* End ProcessManager::reconfigure */
 
+void
+ProcessManager::signalConfigFileChild(const char *parent, const char *child, unsigned int options)
+{
+  static const MgmtMarshallType fields[] = {MGMT_MARSHALL_STRING, MGMT_MARSHALL_STRING, MGMT_MARSHALL_INT};
+
+  MgmtMarshallInt mgmtopt = options;
+  size_t len              = mgmt_message_length(fields, countof(fields), &parent, &child, &mgmtopt);
+  void *buffer            = ats_malloc(len);
+
+  mgmt_message_marshall(buffer, len, fields, countof(fields), &parent, &child, &mgmtopt);
+  signalManager(MGMT_SIGNAL_CONFIG_FILE_CHILD, (const char *)buffer, len);
+
+  ats_free(buffer);
+}
 
 void
 ProcessManager::signalManager(int msg_id, const char *data_str)
 {
   signalManager(msg_id, data_str, strlen(data_str) + 1);
   return;
-}                               /* End ProcessManager::signalManager */
-
+} /* End ProcessManager::signalManager */
 
 void
 ProcessManager::signalManager(int msg_id, const char *data_raw, int data_len)
 {
-
   MgmtMessageHdr *mh;
 
-  mh = (MgmtMessageHdr *)ats_malloc(sizeof(MgmtMessageHdr) + data_len);
-  mh->msg_id = msg_id;
+  mh           = (MgmtMessageHdr *)ats_malloc(sizeof(MgmtMessageHdr) + data_len);
+  mh->msg_id   = msg_id;
   mh->data_len = data_len;
-  memcpy((char *) mh + sizeof(MgmtMessageHdr), data_raw, data_len);
+  memcpy((char *)mh + sizeof(MgmtMessageHdr), data_raw, data_len);
   ink_assert(enqueue(mgmt_signal_queue, mh));
   return;
 
-}                               /* End ProcessManager::signalManager */
-
+} /* End ProcessManager::signalManager */
 
 bool
 ProcessManager::processEventQueue()
@@ -119,24 +133,22 @@ ProcessManager::processEventQueue()
   bool ret = false;
 
   while (!queue_is_empty(mgmt_event_queue)) {
-    MgmtMessageHdr *mh = (MgmtMessageHdr *) dequeue(mgmt_event_queue);
+    MgmtMessageHdr *mh = (MgmtMessageHdr *)dequeue(mgmt_event_queue);
 
-    Debug("pmgmt", "[ProcessManager] ==> Processing event id '%d' payload=%d\n", mh->msg_id, mh->data_len);
+    Debug("pmgmt", "[ProcessManager] ==> Processing event id '%d' payload=%d", mh->msg_id, mh->data_len);
     if (mh->data_len > 0) {
-      executeMgmtCallback(mh->msg_id, (char *) mh + sizeof(MgmtMessageHdr), mh->data_len);
+      executeMgmtCallback(mh->msg_id, (char *)mh + sizeof(MgmtMessageHdr), mh->data_len);
     } else {
       executeMgmtCallback(mh->msg_id, NULL, 0);
     }
     if (mh->msg_id == MGMT_EVENT_SHUTDOWN) {
-      mgmt_log(stderr, "[ProcessManager::processEventQueue] Shutdown msg received, exiting\n");
-      _exit(0);
-    }                           /* Exit on shutdown */
+      mgmt_fatal(0, "[ProcessManager::processEventQueue] Shutdown msg received, exiting\n");
+    } /* Exit on shutdown */
     ats_free(mh);
     ret = true;
   }
   return ret;
-}                               /* End ProcessManager::processEventQueue */
-
+} /* End ProcessManager::processEventQueue */
 
 bool
 ProcessManager::processSignalQueue()
@@ -144,13 +156,13 @@ ProcessManager::processSignalQueue()
   bool ret = false;
 
   while (!queue_is_empty(mgmt_signal_queue)) {
-    MgmtMessageHdr *mh = (MgmtMessageHdr *) dequeue(mgmt_signal_queue);
+    MgmtMessageHdr *mh = (MgmtMessageHdr *)dequeue(mgmt_signal_queue);
 
-    Debug("pmgmt", "[ProcessManager] ==> Signalling local manager '%d'\n", mh->msg_id);
+    Debug("pmgmt", "[ProcessManager] ==> Signalling local manager '%d'", mh->msg_id);
 
-    if (require_lm && mgmt_write_pipe(local_manager_sockfd, (char *) mh, sizeof(MgmtMessageHdr) + mh->data_len) <= 0) {
-      mgmt_fatal(stderr, errno, "[ProcessManager::processSignalQueue] Error writing message!");
-      //ink_assert(enqueue(mgmt_signal_queue, mh));
+    if (require_lm && mgmt_write_pipe(local_manager_sockfd, (char *)mh, sizeof(MgmtMessageHdr) + mh->data_len) <= 0) {
+      mgmt_fatal(errno, "[ProcessManager::processSignalQueue] Error writing message!");
+      // ink_assert(enqueue(mgmt_signal_queue, mh));
     } else {
       ats_free(mh);
       ret = true;
@@ -158,8 +170,7 @@ ProcessManager::processSignalQueue()
   }
 
   return ret;
-}                               /* End ProcessManager::processSignalQueue */
-
+} /* End ProcessManager::processSignalQueue */
 
 void
 ProcessManager::initLMConnection()
@@ -167,16 +178,14 @@ ProcessManager::initLMConnection()
   ats_scoped_str rundir(RecConfigReadRuntimeDir());
   ats_scoped_str sockpath(Layout::relative_to(rundir, LM_CONNECTION_SERVER));
 
-  MgmtMessageHdr mh_hdr;
   MgmtMessageHdr *mh_full;
   int data_len;
-  char *sync_key_raw = NULL;
 
   int servlen;
   struct sockaddr_un serv_addr;
 
   /* Setup Connection to LocalManager */
-  memset((char *) &serv_addr, 0, sizeof(serv_addr));
+  memset((char *)&serv_addr, 0, sizeof(serv_addr));
   serv_addr.sun_family = AF_UNIX;
 
   ink_strlcpy(serv_addr.sun_path, sockpath, sizeof(serv_addr.sun_path));
@@ -186,107 +195,82 @@ ProcessManager::initLMConnection()
   servlen = strlen(serv_addr.sun_path) + sizeof(serv_addr.sun_family);
 #endif
   if ((local_manager_sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
-    mgmt_fatal(stderr, errno, "[ProcessManager::initLMConnection] Unable to create socket\n");
+    mgmt_fatal(errno, "[ProcessManager::initLMConnection] Unable to create socket\n");
   }
 
-  if (fcntl(local_manager_sockfd, F_SETFD, 1) < 0) {
-    mgmt_fatal(stderr, errno, "[ProcessManager::initLMConnection] Unable to set close-on-exec\n");
+  if (fcntl(local_manager_sockfd, F_SETFD, FD_CLOEXEC) < 0) {
+    mgmt_fatal(errno, "[ProcessManager::initLMConnection] Unable to set close-on-exec\n");
   }
 
-  if ((connect(local_manager_sockfd, (struct sockaddr *) &serv_addr, servlen)) < 0) {
-    mgmt_fatal(stderr, errno, "[ProcessManager::initLMConnection] failed to connect management socket '%s'\n", (const char *)sockpath);
+  if ((connect(local_manager_sockfd, (struct sockaddr *)&serv_addr, servlen)) < 0) {
+    mgmt_fatal(errno, "[ProcessManager::initLMConnection] failed to connect management socket '%s'\n", (const char *)sockpath);
   }
 
-  data_len = sizeof(pid_t);
-  mh_full = (MgmtMessageHdr *) alloca(sizeof(MgmtMessageHdr) + data_len);
-  mh_full->msg_id = MGMT_SIGNAL_PID;
+  data_len          = sizeof(pid_t);
+  mh_full           = (MgmtMessageHdr *)alloca(sizeof(MgmtMessageHdr) + data_len);
+  mh_full->msg_id   = MGMT_SIGNAL_PID;
   mh_full->data_len = data_len;
-  memcpy((char *) mh_full + sizeof(MgmtMessageHdr), &(pid), data_len);
-  if (mgmt_write_pipe(local_manager_sockfd, (char *) mh_full, sizeof(MgmtMessageHdr) + data_len) <= 0) {
-    mgmt_fatal(stderr, errno, "[ProcessManager::initLMConnection] Error writing message!\n");
+  memcpy((char *)mh_full + sizeof(MgmtMessageHdr), &(pid), data_len);
+  if (mgmt_write_pipe(local_manager_sockfd, (char *)mh_full, sizeof(MgmtMessageHdr) + data_len) <= 0) {
+    mgmt_fatal(errno, "[ProcessManager::initLMConnection] Error writing message!\n");
   }
 
-  /* Read SYNC_KEY from manager */
-  if (mgmt_read_pipe(local_manager_sockfd, (char *) &mh_hdr, sizeof(MgmtMessageHdr)) <= 0) {
-    mgmt_fatal(stderr, errno, "[ProcessManager::initLMConnection] Error reading sem message!\n");
-  } else {
-    // coverity[uninit_use]
-    mh_full = (MgmtMessageHdr *) alloca(sizeof(MgmtMessageHdr) + mh_hdr.data_len);
-    memcpy(mh_full, &mh_hdr, sizeof(MgmtMessageHdr));
-    sync_key_raw = (char *) mh_full + sizeof(MgmtMessageHdr);
-    if (mgmt_read_pipe(local_manager_sockfd, sync_key_raw, mh_hdr.data_len) < 0) {
-      mgmt_fatal(stderr, errno, "[ProcessManager::initLMConnection] Error reading sem message!\n");
-    }
-  }
-
-
-
-  if (sync_key_raw)
-    memcpy(&mgmt_sync_key, sync_key_raw, sizeof(mgmt_sync_key));
-  Debug("pmgmt", "[ProcessManager::initLMConnection] Received key: %d\n", mgmt_sync_key);
-
-}                               /* End ProcessManager::initLMConnection */
-
+} /* End ProcessManager::initLMConnection */
 
 void
 ProcessManager::pollLMConnection()
 {
   int res;
-  struct timeval poll_timeout;
 
   MgmtMessageHdr mh_hdr;
   MgmtMessageHdr *mh_full;
   char *data_raw;
 
-  int num;
-  fd_set fdlist;
+  // Avoid getting stuck enqueuing too many requests in a row, limit to MAX_MSGS_IN_A_ROW.
+  int count;
+  for (count = 0; count < max_msgs_in_a_row; ++count) {
+    int num;
 
-  while (1) {
-
-    // poll only
-    poll_timeout.tv_sec = 0;
-    poll_timeout.tv_usec = 1000;
-
-    FD_ZERO(&fdlist);
-    FD_SET(local_manager_sockfd, &fdlist);
-    num = mgmt_select(FD_SETSIZE, &fdlist, NULL, NULL, &poll_timeout);
-    if (num == 0) {             /* Have nothing */
-
+    num = mgmt_read_timeout(local_manager_sockfd, 1 /* sec */, 0 /* usec */);
+    if (num == 0) { /* Have nothing */
       break;
+    } else if (num > 0) { /* We have a message */
+      if ((res = mgmt_read_pipe(local_manager_sockfd, (char *)&mh_hdr, sizeof(MgmtMessageHdr))) > 0) {
+        size_t mh_full_size = sizeof(MgmtMessageHdr) + mh_hdr.data_len;
+        mh_full             = (MgmtMessageHdr *)ats_malloc(mh_full_size);
 
-    } else if (num > 0) {       /* We have a message */
-
-      if ((res = mgmt_read_pipe(local_manager_sockfd, (char *) &mh_hdr, sizeof(MgmtMessageHdr))) > 0) {
-        mh_full = (MgmtMessageHdr *) alloca(sizeof(MgmtMessageHdr) + mh_hdr.data_len);
         memcpy(mh_full, &mh_hdr, sizeof(MgmtMessageHdr));
-        data_raw = (char *) mh_full + sizeof(MgmtMessageHdr);
+        data_raw = (char *)mh_full + sizeof(MgmtMessageHdr);
+
         if ((res = mgmt_read_pipe(local_manager_sockfd, data_raw, mh_hdr.data_len)) > 0) {
           Debug("pmgmt", "[ProcessManager::pollLMConnection] Message: '%d'", mh_full->msg_id);
           handleMgmtMsgFromLM(mh_full);
         } else if (res < 0) {
-          mgmt_fatal(stderr, errno, "[ProcessManager::pollLMConnection] Error in read!");
+          mgmt_fatal(errno, "[ProcessManager::pollLMConnection] Error in read!");
         }
+
+        ats_free(mh_full);
       } else if (res < 0) {
-        mgmt_fatal(stderr, errno, "[ProcessManager::pollLMConnection] Error in read!");
+        mgmt_fatal(errno, "[ProcessManager::pollLMConnection] Error in read!");
       }
+
       // handle EOF
       if (res == 0) {
         close_socket(local_manager_sockfd);
-        mgmt_fatal(stderr, 0, "[ProcessManager::pollLMConnection] Lost Manager EOF!");
+        mgmt_fatal(0, "[ProcessManager::pollLMConnection] Lost Manager EOF!");
       }
-
-    } else if (num < 0) {       /* Error */
-      mgmt_elog(stderr, 0, "[ProcessManager::pollLMConnection] select failed or was interrupted (%d)\n", errno);
+    } else if (num < 0) { /* Error */
+      mgmt_log("[ProcessManager::pollLMConnection] select failed or was interrupted (%d)\n", errno);
     }
-
   }
 
-}                               /* End ProcessManager::pollLMConnection */
+  Debug("pmgmt", "[ProcessManager::pollLMConnection] enqueued %d of max %d messages in a row", count, max_msgs_in_a_row);
+} /* End ProcessManager::pollLMConnection */
 
 void
-ProcessManager::handleMgmtMsgFromLM(MgmtMessageHdr * mh)
+ProcessManager::handleMgmtMsgFromLM(MgmtMessageHdr *mh)
 {
-  char *data_raw = (char *) mh + sizeof(MgmtMessageHdr);
+  char *data_raw = (char *)mh + sizeof(MgmtMessageHdr);
 
   switch (mh->msg_id) {
   case MGMT_EVENT_SHUTDOWN:
@@ -332,8 +316,11 @@ ProcessManager::handleMgmtMsgFromLM(MgmtMessageHdr * mh)
   case MGMT_EVENT_STORAGE_DEVICE_CMD_OFFLINE:
     signalMgmtEntity(MGMT_EVENT_STORAGE_DEVICE_CMD_OFFLINE, data_raw, mh->data_len);
     break;
+  case MGMT_EVENT_LIFECYCLE_MESSAGE:
+    signalMgmtEntity(MGMT_EVENT_LIFECYCLE_MESSAGE, data_raw, mh->data_len);
+    break;
   default:
-    mgmt_elog(stderr, 0, "[ProcessManager::pollLMConnection] unknown type %d\n", mh->msg_id);
+    mgmt_log("[ProcessManager::pollLMConnection] unknown type %d\n", mh->msg_id);
     break;
   }
 }

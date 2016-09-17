@@ -29,11 +29,9 @@
 #ifndef _INK_THREAD_H
 #define _INK_THREAD_H
 
-
-#include "ink_hrtime.h"
-#include "ink_defs.h"
+#include "ts/ink_hrtime.h"
+#include "ts/ink_defs.h"
 #include <sched.h>
-
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -51,6 +49,7 @@
 #endif
 
 #define INK_MUTEX_INIT PTHREAD_MUTEX_INITIALIZER
+#define INK_THREAD_STACK_MIN PTHREAD_STACK_MIN
 
 typedef pthread_t ink_thread;
 typedef pthread_cond_t ink_cond;
@@ -64,13 +63,15 @@ typedef pthread_key_t ink_thread_key;
 
 struct ink_semaphore {
 #if TS_EMULATE_ANON_SEMAPHORES
-  sem_t * sema;
+  sem_t *sema;
   int64_t semid;
 #else
   sem_t sema;
 #endif
 
-  sem_t * get() {
+  sem_t *
+  get()
+  {
 #if TS_EMULATE_ANON_SEMAPHORES
     return sema;
 #else
@@ -91,9 +92,9 @@ typedef struct timespec ink_timestruc;
 typedef timestruc_t ink_timestruc;
 #endif
 
-#include "ink_mutex.h"
 #include <errno.h>
-#include "ink_assert.h"
+#include "ts/ink_mutex.h"
+#include "ts/ink_assert.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -103,7 +104,7 @@ typedef timestruc_t ink_timestruc;
 #if defined(POSIX_THREAD)
 
 static inline void
-ink_thread_key_create(ink_thread_key * key, void (*destructor) (void *value))
+ink_thread_key_create(ink_thread_key *key, void (*destructor)(void *value))
 {
   ink_assert(!pthread_key_create(key, destructor));
 }
@@ -126,9 +127,8 @@ ink_thread_key_delete(ink_thread_key key)
   ink_assert(!pthread_key_delete(key));
 }
 
-
 static inline ink_thread
-ink_thread_create(void *(*f) (void *), void *a, int detached = 0, size_t stacksize = 0)
+ink_thread_create(void *(*f)(void *), void *a, int detached = 0, size_t stacksize = 0, void *stack = NULL)
 {
   ink_thread t;
   int ret;
@@ -138,7 +138,11 @@ ink_thread_create(void *(*f) (void *), void *a, int detached = 0, size_t stacksi
   pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM);
 
   if (stacksize) {
-    pthread_attr_setstacksize(&attr, stacksize);
+    if (stack) {
+      pthread_attr_setstack(&attr, stack, stacksize);
+    } else {
+      pthread_attr_setstacksize(&attr, stacksize);
+    }
   }
 
   if (detached) {
@@ -146,21 +150,19 @@ ink_thread_create(void *(*f) (void *), void *a, int detached = 0, size_t stacksi
   }
 
   ret = pthread_create(&t, &attr, f, a);
-  ink_assert(ret == 0);
+  if (ret != 0) {
+    ink_abort("pthread_create() failed: %s (%d)", strerror(ret), ret);
+  }
   pthread_attr_destroy(&attr);
 
-  /**
-   * Fix for INKqa10118.
-   * If the thread has not been created successfully return 0.
-   */
-  return ret ? (ink_thread) 0 : t;
+  return t;
 }
 
 static inline void
 ink_thread_cancel(ink_thread who)
 {
 #if defined(freebsd)
-  (void) who;
+  (void)who;
   ink_assert(!"not supported");
 #else
   int ret = pthread_cancel(who);
@@ -186,21 +188,21 @@ static inline int
 ink_thread_get_priority(ink_thread t, int *priority)
 {
 #if defined(freebsd)
-  (void) t;
-  (void) priority;
+  (void)t;
+  (void)priority;
   ink_assert(!"not supported");
   return -1;
 #else
   int policy;
   struct sched_param param;
-  int res = pthread_getschedparam(t, &policy, &param);
+  int res   = pthread_getschedparam(t, &policy, &param);
   *priority = param.sched_priority;
   return res;
 #endif
 }
 
 static inline int
-ink_thread_sigsetmask(int how, const sigset_t * set, sigset_t * oset)
+ink_thread_sigsetmask(int how, const sigset_t *set, sigset_t *oset)
 {
   return (pthread_sigmask(how, set, oset));
 }
@@ -209,38 +211,39 @@ ink_thread_sigsetmask(int how, const sigset_t * set, sigset_t * oset)
  * Posix Semaphores
  ******************************************************************/
 
-void ink_sem_init(ink_semaphore * sp, unsigned int count);
-void ink_sem_destroy(ink_semaphore * sp);
-void ink_sem_wait(ink_semaphore * sp);
-bool ink_sem_trywait(ink_semaphore * sp);
-void ink_sem_post(ink_semaphore * sp);
+void ink_sem_init(ink_semaphore *sp, unsigned int count);
+void ink_sem_destroy(ink_semaphore *sp);
+void ink_sem_wait(ink_semaphore *sp);
+bool ink_sem_trywait(ink_semaphore *sp);
+void ink_sem_post(ink_semaphore *sp);
 
 /*******************************************************************
  * Posix Condition Variables
  ******************************************************************/
 
 static inline void
-ink_cond_init(ink_cond * cp)
+ink_cond_init(ink_cond *cp)
 {
   ink_assert(pthread_cond_init(cp, NULL) == 0);
 }
 
 static inline void
-ink_cond_destroy(ink_cond * cp)
+ink_cond_destroy(ink_cond *cp)
 {
   ink_assert(pthread_cond_destroy(cp) == 0);
 }
 
 static inline void
-ink_cond_wait(ink_cond * cp, ink_mutex * mp)
+ink_cond_wait(ink_cond *cp, ink_mutex *mp)
 {
   ink_assert(pthread_cond_wait(cp, mp) == 0);
 }
 static inline int
-ink_cond_timedwait(ink_cond * cp, ink_mutex * mp, ink_timestruc * t)
+ink_cond_timedwait(ink_cond *cp, ink_mutex *mp, ink_timestruc *t)
 {
   int err;
-  while (EINTR == (err = pthread_cond_timedwait(cp, mp, t)));
+  while (EINTR == (err = pthread_cond_timedwait(cp, mp, t)))
+    ;
 #if defined(freebsd) || defined(openbsd)
   ink_assert((err == 0) || (err == ETIMEDOUT));
 #else
@@ -250,13 +253,13 @@ ink_cond_timedwait(ink_cond * cp, ink_mutex * mp, ink_timestruc * t)
 }
 
 static inline void
-ink_cond_signal(ink_cond * cp)
+ink_cond_signal(ink_cond *cp)
 {
   ink_assert(pthread_cond_signal(cp) == 0);
 }
 
 static inline void
-ink_cond_broadcast(ink_cond * cp)
+ink_cond_broadcast(ink_cond *cp)
 {
   ink_assert(pthread_cond_broadcast(cp) == 0);
 }
@@ -277,7 +280,7 @@ ink_thread_exit(void *status)
 // Linux specific... Feel free to add support for other platforms
 // that has a feature to give a thread specific name / tag.
 static inline void
-ink_set_thread_name(const char* name ATS_UNUSED)
+ink_set_thread_name(const char *name ATS_UNUSED)
 {
 #if defined(HAVE_PTHREAD_SETNAME_NP_1)
   pthread_setname_np(name);

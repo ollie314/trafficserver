@@ -21,19 +21,19 @@
   limitations under the License.
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_Net.h"
 #include "Show.h"
 #include "I_Tasks.h"
 
 struct ShowNet;
-typedef int (ShowNet::*ShowNetEventHandler) (int event, Event * data);
-struct ShowNet: public ShowCont
-{
+typedef int (ShowNet::*ShowNetEventHandler)(int event, Event *data);
+struct ShowNet : public ShowCont {
   int ithread;
   IpEndpoint addr;
 
-  int showMain(int event, Event * e)
+  int
+  showMain(int event, Event *e)
   {
     CHECK_SHOW(begin("Net"));
     CHECK_SHOW(show("<H3>Show <A HREF=\"./connections\">Connections</A></H3>\n"
@@ -44,73 +44,63 @@ struct ShowNet: public ShowCont
                     "</form>\n"
                     "<form method = GET action = \"./ports\">\n"
                     "Show Connections to/from Port (e.g. 80):<br>\n"
-                    "<input type=text name=name size=64 maxlength=256>\n" "</form>\n"));
+                    "<input type=text name=name size=64 maxlength=256>\n"
+                    "</form>\n"));
     return complete(event, e);
   }
 
-  int showConnectionsOnThread(int event, Event * e)
+  int
+  showConnectionsOnThread(int event, Event *e)
   {
     EThread *ethread = e->ethread;
-    NetHandler *nh = get_NetHandler(ethread);
+    NetHandler *nh   = get_NetHandler(ethread);
     MUTEX_TRY_LOCK(lock, nh->mutex, ethread);
     if (!lock.is_locked()) {
-      ethread->schedule_in(this, NET_RETRY_DELAY);
+      ethread->schedule_in(this, HRTIME_MSECONDS(net_retry_delay));
       return EVENT_DONE;
     }
 
-    ink_hrtime now = ink_get_hrtime();
-    forl_LL(UnixNetVConnection, vc, nh->open_list) {
-//      uint16_t port = ats_ip_port_host_order(&addr.sa);
+    ink_hrtime now = Thread::get_hrtime();
+    forl_LL(UnixNetVConnection, vc, nh->open_list)
+    {
+      //      uint16_t port = ats_ip_port_host_order(&addr.sa);
       if (ats_is_ip(&addr) && addr != vc->server_addr)
         continue;
-//      if (port && port != ats_ip_port_host_order(&vc->server_addr.sa) && port != vc->accept_port)
-//        continue;
+      //      if (port && port != ats_ip_port_host_order(&vc->server_addr.sa) && port != vc->accept_port)
+      //        continue;
       char ipbuf[INET6_ADDRSTRLEN];
       ats_ip_ntop(&vc->server_addr.sa, ipbuf, sizeof(ipbuf));
       char opt_ipbuf[INET6_ADDRSTRLEN];
       char interbuf[80];
-      snprintf(interbuf, sizeof(interbuf), "[%s] %s:%d",
-        vc->options.toString(vc->options.addr_binding),
-        vc->options.local_ip.toString(opt_ipbuf, sizeof(opt_ipbuf)),
-        vc->options.local_port
-      );
+      snprintf(interbuf, sizeof(interbuf), "[%s] %s:%d", vc->options.toString(vc->options.addr_binding),
+               vc->options.local_ip.toString(opt_ipbuf, sizeof(opt_ipbuf)), vc->options.local_port);
       CHECK_SHOW(show("<tr>"
                       //"<td><a href=\"/connection/%d\">%d</a></td>"
-                      "<td>%d</td>"     // ID
-                      "<td>%s</td>"     // ipbuf
-                      "<td>%d</td>"     // port
-                      "<td>%d</td>"     // fd
-                      "<td>%s</td>"     // interbuf
-//                      "<td>%d</td>"     // accept port
-                      "<td>%d secs ago</td>"    // start time
-                      "<td>%d</td>"     // thread id
-                      "<td>%d</td>"     // read enabled
-                      "<td>%" PRId64 "</td>"     // read NBytes
-                      "<td>%" PRId64 "</td>"     // read NDone
-                      "<td>%d</td>"     // write enabled
-                      "<td>%" PRId64 "</td>"     // write nbytes
-                      "<td>%" PRId64 "</td>"     // write ndone
-                      "<td>%d secs</td>"        // Inactivity timeout at
-                      "<td>%d secs</td>"        // Activity timeout at
-                      "<td>%d</td>"     // shutdown
-                      "<td>-%s</td>"    // comments
+                      "<td>%d</td>"          // ID
+                      "<td>%s</td>"          // ipbuf
+                      "<td>%d</td>"          // port
+                      "<td>%d</td>"          // fd
+                      "<td>%s</td>"          // interbuf
+                                             //                      "<td>%d</td>"     // accept port
+                      "<td>%d secs ago</td>" // start time
+                      "<td>%d</td>"          // thread id
+                      "<td>%d</td>"          // read enabled
+                      "<td>%" PRId64 "</td>" // read NBytes
+                      "<td>%" PRId64 "</td>" // read NDone
+                      "<td>%d</td>"          // write enabled
+                      "<td>%" PRId64 "</td>" // write nbytes
+                      "<td>%" PRId64 "</td>" // write ndone
+                      "<td>%d secs</td>"     // Inactivity timeout at
+                      "<td>%d secs</td>"     // Activity timeout at
+                      "<td>%d</td>"          // shutdown
+                      "<td>-%s</td>"         // comments
                       "</tr>\n",
-                      vc->id,
-                      ipbuf,
-                      ats_ip_port_host_order(&vc->server_addr),
-                      vc->con.fd,
-                      interbuf,
-//                      vc->accept_port,
-                      (int) ((now - vc->submit_time) / HRTIME_SECOND),
-                      ethread->id,
-                      vc->read.enabled,
-                      vc->read.vio.nbytes,
-                      vc->read.vio.ndone,
-                      vc->write.enabled,
-                      vc->write.vio.nbytes,
-                      vc->write.vio.ndone,
-                      (int) (vc->inactivity_timeout_in / HRTIME_SECOND),
-                      (int) (vc->active_timeout_in / HRTIME_SECOND), vc->f.shutdown, vc->closed ? "closed " : ""));
+                      vc->id, ipbuf, ats_ip_port_host_order(&vc->server_addr), vc->con.fd, interbuf,
+                      //                      vc->accept_port,
+                      (int)((now - vc->submit_time) / HRTIME_SECOND), ethread->id, vc->read.enabled, vc->read.vio.nbytes,
+                      vc->read.vio.ndone, vc->write.enabled, vc->write.vio.nbytes, vc->write.vio.ndone,
+                      (int)(vc->inactivity_timeout_in / HRTIME_SECOND), (int)(vc->active_timeout_in / HRTIME_SECOND),
+                      vc->f.shutdown, vc->closed ? "closed " : ""));
     }
     ithread++;
     if (ithread < eventProcessor.n_threads_for_type[ET_NET])
@@ -122,7 +112,8 @@ struct ShowNet: public ShowCont
     return EVENT_CONT;
   }
 
-  int showConnections(int event, Event * e)
+  int
+  showConnections(int event, Event *e)
   {
     CHECK_SHOW(begin("Net Connections"));
     CHECK_SHOW(show("<H3>Connections</H3>\n"
@@ -151,29 +142,28 @@ struct ShowNet: public ShowCont
     return EVENT_CONT;
   }
 
-  int showSingleThread(int event, Event * e)
+  int
+  showSingleThread(int event, Event *e)
   {
-    EThread *ethread = e->ethread;
-    NetHandler *nh = get_NetHandler(ethread);
+    EThread *ethread               = e->ethread;
+    NetHandler *nh                 = get_NetHandler(ethread);
     PollDescriptor *pollDescriptor = get_PollDescriptor(ethread);
     MUTEX_TRY_LOCK(lock, nh->mutex, ethread);
     if (!lock.is_locked()) {
-      ethread->schedule_in(this, NET_RETRY_DELAY);
+      ethread->schedule_in(this, HRTIME_MSECONDS(net_retry_delay));
       return EVENT_DONE;
     }
 
     CHECK_SHOW(show("<H3>Thread: %d</H3>\n", ithread));
     CHECK_SHOW(show("<table border=1>\n"));
     int connections = 0;
-    forl_LL(UnixNetVConnection, vc, nh->open_list)
-      connections++;
+    forl_LL(UnixNetVConnection, vc, nh->open_list) connections++;
     CHECK_SHOW(show("<tr><td>%s</td><td>%d</td></tr>\n", "Connections", connections));
-    //CHECK_SHOW(show("<tr><td>%s</td><td>%d</td></tr>\n", "Last Poll Size", pollDescriptor->nfds));
+    // CHECK_SHOW(show("<tr><td>%s</td><td>%d</td></tr>\n", "Last Poll Size", pollDescriptor->nfds));
     CHECK_SHOW(show("<tr><td>%s</td><td>%d</td></tr>\n", "Last Poll Ready", pollDescriptor->result));
     CHECK_SHOW(show("</table>\n"));
     CHECK_SHOW(show("<table border=1>\n"));
-    CHECK_SHOW(show
-               ("<tr><th>#</th><th>Read Priority</th><th>Read Bucket</th><th>Write Priority</th><th>Write Bucket</th></tr>\n"));
+    CHECK_SHOW(show("<tr><th>#</th><th>Read Priority</th><th>Read Bucket</th><th>Write Priority</th><th>Write Bucket</th></tr>\n"));
     CHECK_SHOW(show("</table>\n"));
     ithread++;
     if (ithread < eventProcessor.n_threads_for_type[ET_NET])
@@ -183,35 +173,38 @@ struct ShowNet: public ShowCont
     return EVENT_CONT;
   }
 
-  int showThreads(int event, Event * e)
+  int
+  showThreads(int event, Event *e)
   {
     CHECK_SHOW(begin("Net Threads"));
     SET_HANDLER(&ShowNet::showSingleThread);
     eventProcessor.eventthread[ET_NET][0]->schedule_imm(this); // This can not use ET_TASK
     return EVENT_CONT;
   }
-  int showSingleConnection(int event, Event * e)
+  int
+  showSingleConnection(int event, Event *e)
   {
     CHECK_SHOW(begin("Net Connection"));
     return complete(event, e);
   }
-  int showHostnames(int event, Event * e)
+  int
+  showHostnames(int event, Event *e)
   {
     CHECK_SHOW(begin("Net Connections to/from Host"));
     return complete(event, e);
   }
 
-ShowNet(Continuation * c, HTTPHdr * h):
-  ShowCont(c, h), ithread(0) {
+  ShowNet(Continuation *c, HTTPHdr *h) : ShowCont(c, h), ithread(0)
+  {
     memset(&addr, 0, sizeof(addr));
     SET_HANDLER(&ShowNet::showMain);
   }
 };
 
 #undef STREQ_PREFIX
-#define STREQ_PREFIX(_x,_n,_s) (!ptr_len_ncasecmp(_x,_n,_s,sizeof(_s)-1))
+#define STREQ_PREFIX(_x, _n, _s) (!ptr_len_ncasecmp(_x, _n, _s, sizeof(_s) - 1))
 Action *
-register_ShowNet(Continuation * c, HTTPHdr * h)
+register_ShowNet(Continuation *c, HTTPHdr *h)
 {
   ShowNet *s = new ShowNet(c, h);
   int path_len;
@@ -225,8 +218,8 @@ register_ShowNet(Continuation * c, HTTPHdr * h)
   } else if (STREQ_PREFIX(path, path_len, "ips")) {
     int query_len;
     const char *query = h->url_get()->query_get(&query_len);
-    s->sarg = ats_strndup(query, query_len);
-    char *gn = NULL;
+    s->sarg           = ats_strndup(query, query_len);
+    char *gn          = NULL;
     if (s->sarg)
       gn = (char *)memchr(s->sarg, '=', strlen(s->sarg));
     if (gn)
@@ -235,15 +228,14 @@ register_ShowNet(Continuation * c, HTTPHdr * h)
   } else if (STREQ_PREFIX(path, path_len, "ports")) {
     int query_len;
     const char *query = h->url_get()->query_get(&query_len);
-    s->sarg = ats_strndup(query, query_len);
-    char *gn = NULL;
+    s->sarg           = ats_strndup(query, query_len);
+    char *gn          = NULL;
     if (s->sarg)
       gn = (char *)memchr(s->sarg, '=', strlen(s->sarg));
     if (gn)
-      ats_ip_port_cast(&s->addr.sa) = htons(atoi(gn+1));
+      ats_ip_port_cast(&s->addr.sa) = htons(atoi(gn + 1));
     SET_CONTINUATION_HANDLER(s, &ShowNet::showConnections);
   }
   eventProcessor.schedule_imm(s, ET_TASK);
   return &s->action;
 }
-

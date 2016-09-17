@@ -24,41 +24,40 @@
 #include "P_Net.h"
 
 Diags *diags;
-struct NetTesterSM:public Continuation
-{
+struct NetTesterSM : public Continuation {
   VIO *read_vio;
   IOBufferReader *reader;
   NetVConnection *vc;
   MIOBuffer *buf;
 
-    NetTesterSM(ProxyMutex * _mutex, NetVConnection * _vc):Continuation(_mutex)
+  NetTesterSM(ProxyMutex *_mutex, NetVConnection *_vc) : Continuation(_mutex)
   {
     MUTEX_TRY_LOCK(lock, mutex, _vc->thread);
     ink_release_assert(lock);
     vc = _vc;
     SET_HANDLER(&NetTesterSM::handle_read);
-    buf = new_MIOBuffer(8);
-    reader = buf->alloc_reader();
+    buf      = new_MIOBuffer(8);
+    reader   = buf->alloc_reader();
     read_vio = vc->do_io_read(this, INT64_MAX, buf);
   }
 
-
-  int handle_read(int event, void *data)
+  int
+  handle_read(int event, void *data)
   {
     int r;
-    char *str;
+    char *str = NULL;
     switch (event) {
     case VC_EVENT_READ_READY:
-      r = reader->read_avail();
+      r   = reader->read_avail();
       str = new char[r + 10];
       reader->read(str, r);
       printf("%s", str);
       fflush(stdout);
       break;
     case VC_EVENT_READ_COMPLETE:
-      /* FALLSTHROUGH */
+    /* FALLSTHROUGH */
     case VC_EVENT_EOS:
-      r = reader->read_avail();
+      r   = reader->read_avail();
       str = new char[r + 10];
       reader->read(str, r);
       printf("%s", str);
@@ -68,37 +67,24 @@ struct NetTesterSM:public Continuation
       break;
     default:
       ink_release_assert(!"unknown event");
-
     }
+    delete[] str;
     return EVENT_CONT;
   }
-
-
 };
 
-
-struct NetTesterAccept:public Continuation
-{
-
-  NetTesterAccept(ProxyMutex * _mutex):Continuation(_mutex)
-  {
-    SET_HANDLER(&NetTesterAccept::handle_accept);
-  }
-
-  int handle_accept(int event, void *data)
+struct NetTesterAccept : public Continuation {
+  NetTesterAccept(ProxyMutex *_mutex) : Continuation(_mutex) { SET_HANDLER(&NetTesterAccept::handle_accept); }
+  int
+  handle_accept(int event, void *data)
   {
     printf("Accepted a connection\n");
     fflush(stdout);
-    NetVConnection *vc = (NetVConnection *) data;
+    NetVConnection *vc = (NetVConnection *)data;
     new NetTesterSM(new_ProxyMutex(), vc);
     return EVENT_CONT;
   }
-
-
 };
-
-
-
 
 int
 main()

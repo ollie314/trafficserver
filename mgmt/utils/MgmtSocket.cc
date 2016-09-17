@@ -21,8 +21,13 @@
   limitations under the License.
  */
 
-#include "ink_platform.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_assert.h"
 #include "MgmtSocket.h"
+
+#if HAVE_UCRED_H
+#include <ucred.h>
+#endif
 
 //-------------------------------------------------------------------------
 // defines
@@ -37,15 +42,27 @@
 bool
 mgmt_transient_error()
 {
-  bool transient = false;
-  transient = (errno == EINTR);
+  switch (errno) {
+  case EINTR:
+  case EAGAIN:
+
 #ifdef ENOMEM
-  transient = transient || (errno == ENOMEM);
+  case ENOMEM:
 #endif
+
 #ifdef ENOBUF
-  transient = transient || (errno == ENOBUF);
+  case ENOBUF:
 #endif
-  return transient;
+
+#if defined(EWOULDBLOCK) && (EWOULDBLOCK != EAGAIN)
+  case EWOULDBLOCK:
+#endif
+
+    return true;
+
+  default:
+    return false;
+  }
 }
 
 //-------------------------------------------------------------------------
@@ -57,15 +74,18 @@ mgmt_transient_error()
 //-------------------------------------------------------------------------
 
 int
-mgmt_accept(int s, struct sockaddr *addr, int *addrlen)
+mgmt_accept(int s, struct sockaddr *addr, socklen_t *addrlen)
 {
   int r, retries;
+  ink_assert(*addrlen != 0);
   for (retries = 0; retries < MGMT_MAX_TRANSIENT_ERRORS; retries++) {
-    r =::accept(s, addr, (socklen_t *) addrlen);
-    if (r >= 0)
+    r = ::accept(s, addr, (socklen_t *)addrlen);
+    if (r >= 0) {
       return r;
-    if (!mgmt_transient_error())
+    }
+    if (!mgmt_transient_error()) {
       break;
+    }
   }
   return r;
 }
@@ -82,11 +102,13 @@ mgmt_fopen(const char *filename, const char *mode)
   for (retries = 0; retries < MGMT_MAX_TRANSIENT_ERRORS; retries++) {
     // no leak here as f will be returned if it is > 0
     // coverity[overwrite_var]
-    f =::fopen(filename, mode);
-    if (f > 0)
+    f = ::fopen(filename, mode);
+    if (f != NULL) {
       return f;
-    if (!mgmt_transient_error())
+    }
+    if (!mgmt_transient_error()) {
       break;
+    }
   }
   return f;
 }
@@ -100,11 +122,13 @@ mgmt_open(const char *path, int oflag)
 {
   int r, retries;
   for (retries = 0; retries < MGMT_MAX_TRANSIENT_ERRORS; retries++) {
-    r =::open(path, oflag);
-    if (r >= 0)
+    r = ::open(path, oflag);
+    if (r >= 0) {
       return r;
-    if (!mgmt_transient_error())
+    }
+    if (!mgmt_transient_error()) {
       break;
+    }
   }
   return r;
 }
@@ -118,11 +142,13 @@ mgmt_open_mode(const char *path, int oflag, mode_t mode)
 {
   int r, retries;
   for (retries = 0; retries < MGMT_MAX_TRANSIENT_ERRORS; retries++) {
-    r =::open(path, oflag, mode);
-    if (r >= 0)
+    r = ::open(path, oflag, mode);
+    if (r >= 0) {
       return r;
-    if (!mgmt_transient_error())
+    }
+    if (!mgmt_transient_error()) {
       break;
+    }
   }
   return r;
 }
@@ -132,21 +158,21 @@ mgmt_open_mode(const char *path, int oflag, mode_t mode)
 //-------------------------------------------------------------------------
 
 int
-mgmt_select(int nfds, fd_set * readfds, fd_set * writefds, fd_set * errorfds, struct timeval *timeout)
+mgmt_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *errorfds, struct timeval *timeout)
 {
-  // Note: Linux select() has slight different semantics.  From the
-  // man page: "On Linux, timeout is modified to reflect the amount of
-  // time not slept; most other implementations do not do this."
-  // Linux select() can also return ENOMEM, so we espeically need to
-  // protect the call with the transient error retry loop.
-  // Fortunately, because of the Linux timeout handling, our
-  // mgmt_select call will still timeout correctly, rather than
-  // possibly extending our timeout period by up to
-  // MGMT_MAX_TRANSIENT_ERRORS times.
+// Note: Linux select() has slight different semantics.  From the
+// man page: "On Linux, timeout is modified to reflect the amount of
+// time not slept; most other implementations do not do this."
+// Linux select() can also return ENOMEM, so we espeically need to
+// protect the call with the transient error retry loop.
+// Fortunately, because of the Linux timeout handling, our
+// mgmt_select call will still timeout correctly, rather than
+// possibly extending our timeout period by up to
+// MGMT_MAX_TRANSIENT_ERRORS times.
 #if defined(linux)
   int r, retries;
   for (retries = 0; retries < MGMT_MAX_TRANSIENT_ERRORS; retries++) {
-    r =::select(nfds, readfds, writefds, errorfds, timeout);
+    r = ::select(nfds, readfds, writefds, errorfds, timeout);
     if (r >= 0)
       return r;
     if (!mgmt_transient_error())
@@ -154,7 +180,7 @@ mgmt_select(int nfds, fd_set * readfds, fd_set * writefds, fd_set * errorfds, st
   }
   return r;
 #else
-  return::select(nfds, readfds, writefds, errorfds, timeout);
+  return ::select(nfds, readfds, writefds, errorfds, timeout);
 #endif
 }
 
@@ -167,11 +193,13 @@ mgmt_sendto(int fd, void *buf, int len, int flags, struct sockaddr *to, int tole
 {
   int r, retries;
   for (retries = 0; retries < MGMT_MAX_TRANSIENT_ERRORS; retries++) {
-    r =::sendto(fd, (char *) buf, len, flags, to, tolen);
-    if (r >= 0)
+    r = ::sendto(fd, (char *)buf, len, flags, to, tolen);
+    if (r >= 0) {
       return r;
-    if (!mgmt_transient_error())
+    }
+    if (!mgmt_transient_error()) {
       break;
+    }
   }
   return r;
 }
@@ -185,11 +213,13 @@ mgmt_socket(int domain, int type, int protocol)
 {
   int r, retries;
   for (retries = 0; retries < MGMT_MAX_TRANSIENT_ERRORS; retries++) {
-    r =::socket(domain, type, protocol);
-    if (r >= 0)
+    r = ::socket(domain, type, protocol);
+    if (r >= 0) {
       return r;
-    if (!mgmt_transient_error())
+    }
+    if (!mgmt_transient_error()) {
       break;
+    }
   }
   return r;
 }
@@ -211,10 +241,10 @@ mgmt_write_timeout(int fd, int sec, int usec)
 {
   struct timeval timeout;
   fd_set writeSet;
-  timeout.tv_sec = sec;
+  timeout.tv_sec  = sec;
   timeout.tv_usec = usec;
 
-  if (fd < 0 || fd > FD_SETSIZE) {
+  if (fd < 0 || fd >= (int)FD_SETSIZE) {
     errno = EBADF;
     return -1;
   }
@@ -222,11 +252,12 @@ mgmt_write_timeout(int fd, int sec, int usec)
   FD_ZERO(&writeSet);
   FD_SET(fd, &writeSet);
 
-  if (sec < 0 && usec < 0)
-    //blocking select; only returns when fd is ready to write
+  if (sec < 0 && usec < 0) {
+    // blocking select; only returns when fd is ready to write
     return (mgmt_select(fd + 1, NULL, &writeSet, NULL, NULL));
-  else
+  } else {
     return (mgmt_select(fd + 1, NULL, &writeSet, NULL, &timeout));
+  }
 }
 
 /***************************************************************************
@@ -249,10 +280,10 @@ mgmt_read_timeout(int fd, int sec, int usec)
 {
   struct timeval timeout;
   fd_set readSet;
-  timeout.tv_sec = sec;
+  timeout.tv_sec  = sec;
   timeout.tv_usec = usec;
 
-  if (fd < 0) {
+  if (fd < 0 || fd >= (int)FD_SETSIZE) {
     errno = EBADF;
     return -1;
   }
@@ -261,4 +292,56 @@ mgmt_read_timeout(int fd, int sec, int usec)
   FD_SET(fd, &readSet);
 
   return mgmt_select(fd + 1, &readSet, NULL, NULL, &timeout);
+}
+
+bool
+mgmt_has_peereid(void)
+{
+#if HAVE_GETPEEREID
+  return true;
+#elif HAVE_GETPEERUCRED
+  return true;
+#elif TS_HAS_SO_PEERCRED
+  return true;
+#else
+  return false;
+#endif
+}
+
+int
+mgmt_get_peereid(int fd, uid_t *euid, gid_t *egid)
+{
+  *euid = -1;
+  *egid = -1;
+
+#if HAVE_GETPEEREID
+  int err = getpeereid(fd, euid, egid);
+  fprintf(stderr, "getpeereid -> %d (%d, %s)", err, errno, strerror(errno));
+  return err;
+#elif HAVE_GETPEERUCRED
+  ucred_t *ucred;
+
+  if (getpeerucred(fd, &ucred) == -1) {
+    return -1;
+  }
+
+  *euid = ucred_geteuid(ucred);
+  *egid = ucred_getegid(ucred);
+  ucred_free(ucred);
+  return 0;
+#elif TS_HAS_SO_PEERCRED
+  struct ucred cred;
+  socklen_t credsz = sizeof(cred);
+  if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &credsz) == -1) {
+    return -1;
+  }
+
+  *euid = cred.uid;
+  *egid = cred.gid;
+  return 0;
+#else
+  (void)fd;
+  errno = ENOTSUP;
+  return -1;
+#endif
 }

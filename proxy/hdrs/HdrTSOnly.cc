@@ -37,17 +37,16 @@
 
  ****************************************************************************/
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "HTTP.h"
 #include "P_EventSystem.h"
 
 /*-------------------------------------------------------------------------
   -------------------------------------------------------------------------*/
 
-MIMEParseResult
-HTTPHdr::parse_req(HTTPParser * parser, IOBufferReader * r, int *bytes_used, bool eof)
+ParseResult
+HTTPHdr::parse_req(HTTPParser *parser, IOBufferReader *r, int *bytes_used, bool eof, bool strict_uri_parsing)
 {
-
   const char *start;
   const char *tmp;
   const char *end;
@@ -56,9 +55,8 @@ HTTPHdr::parse_req(HTTPParser * parser, IOBufferReader * r, int *bytes_used, boo
   ink_assert(valid());
   ink_assert(m_http->m_polarity == HTTP_TYPE_REQUEST);
 
-  MIMEParseResult state = PARSE_CONT;
-  *bytes_used = 0;
-
+  ParseResult state = PARSE_RESULT_CONT;
+  *bytes_used       = 0;
 
   do {
     int64_t b_avail = r->block_read_avail();
@@ -68,26 +66,26 @@ HTTPHdr::parse_req(HTTPParser * parser, IOBufferReader * r, int *bytes_used, boo
     }
 
     tmp = start = r->start();
-    end = start + b_avail;
+    end         = start + b_avail;
 
     int heap_slot = m_heap->attach_block(r->get_current_block(), start);
 
     m_heap->lock_ronly_str_heap(heap_slot);
-    state = http_parser_parse_req(parser, m_heap, m_http, &tmp, end, false, eof);
+    state = http_parser_parse_req(parser, m_heap, m_http, &tmp, end, false, eof, strict_uri_parsing);
     m_heap->set_ronly_str_heap_end(heap_slot, tmp);
     m_heap->unlock_ronly_str_heap(heap_slot);
 
-    used = (int) (tmp - start);
+    used = (int)(tmp - start);
     r->consume(used);
     *bytes_used += used;
 
-  } while (state == PARSE_CONT);
+  } while (state == PARSE_RESULT_CONT);
 
   return state;
 }
 
-MIMEParseResult
-HTTPHdr::parse_resp(HTTPParser * parser, IOBufferReader * r, int *bytes_used, bool eof)
+ParseResult
+HTTPHdr::parse_resp(HTTPParser *parser, IOBufferReader *r, int *bytes_used, bool eof)
 {
   const char *start;
   const char *tmp;
@@ -97,8 +95,8 @@ HTTPHdr::parse_resp(HTTPParser * parser, IOBufferReader * r, int *bytes_used, bo
   ink_assert(valid());
   ink_assert(m_http->m_polarity == HTTP_TYPE_RESPONSE);
 
-  MIMEParseResult state = PARSE_CONT;
-  *bytes_used = 0;
+  ParseResult state = PARSE_RESULT_CONT;
+  *bytes_used       = 0;
 
   do {
     int64_t b_avail = r->block_read_avail();
@@ -108,7 +106,7 @@ HTTPHdr::parse_resp(HTTPParser * parser, IOBufferReader * r, int *bytes_used, bo
     }
 
     tmp = start = r->start();
-    end = start + b_avail;
+    end         = start + b_avail;
 
     int heap_slot = m_heap->attach_block(r->get_current_block(), start);
 
@@ -117,11 +115,11 @@ HTTPHdr::parse_resp(HTTPParser * parser, IOBufferReader * r, int *bytes_used, bo
     m_heap->set_ronly_str_heap_end(heap_slot, tmp);
     m_heap->unlock_ronly_str_heap(heap_slot);
 
-    used = (int) (tmp - start);
+    used = (int)(tmp - start);
     r->consume(used);
     *bytes_used += used;
 
-  } while (state == PARSE_CONT);
+  } while (state == PARSE_RESULT_CONT);
 
   return state;
 }
@@ -144,9 +142,8 @@ HdrHeap::set_ronly_str_heap_end(int slot, const char *end)
   ink_assert(m_ronly_heap[slot].m_heap_start <= end);
   ink_assert(end <= m_ronly_heap[slot].m_heap_start + m_ronly_heap[slot].m_heap_len);
 
-  m_ronly_heap[slot].m_heap_len = (int) (end - m_ronly_heap[slot].m_heap_start);
+  m_ronly_heap[slot].m_heap_len = (int)(end - m_ronly_heap[slot].m_heap_start);
 }
-
 
 // void HdrHeap::attach_block(IOBufferBlock* b, const char* use_start)
 //
@@ -159,9 +156,8 @@ HdrHeap::set_ronly_str_heap_end(int slot, const char *end)
 //      use_start specificies where we start using the block (INKqa07409)
 //
 int
-HdrHeap::attach_block(IOBufferBlock * b, const char *use_start)
+HdrHeap::attach_block(IOBufferBlock *b, const char *use_start)
 {
-
   ink_assert(m_writeable);
 
 RETRY:
@@ -173,22 +169,22 @@ RETRY:
   for (int i = 0; i < HDR_BUF_RONLY_HEAPS; i++) {
     if (m_ronly_heap[i].m_heap_start == NULL) {
       // Add block to heap in this slot
-      m_ronly_heap[i].m_heap_start = (char *) use_start;
-      m_ronly_heap[i].m_heap_len = (int) (b->end() - b->start());
-      m_ronly_heap[i].m_ref_count_ptr = b->data;
-//          printf("Attaching block at %X for %d in slot %d\n",
-//                 m_ronly_heap[i].m_heap_start,
-//                 m_ronly_heap[i].m_heap_len,
-//                 i);
+      m_ronly_heap[i].m_heap_start    = (char *)use_start;
+      m_ronly_heap[i].m_heap_len      = (int)(b->end() - b->start());
+      m_ronly_heap[i].m_ref_count_ptr = b->data.object();
+      //          printf("Attaching block at %X for %d in slot %d\n",
+      //                 m_ronly_heap[i].m_heap_start,
+      //                 m_ronly_heap[i].m_heap_len,
+      //                 i);
       return i;
     } else if (m_ronly_heap[i].m_heap_start == b->buf()) {
       // This block is already on the heap so just extend
       //   it's range
-      m_ronly_heap[i].m_heap_len = (int) (b->end() - b->buf());
-//          printf("Extending block at %X to %d in slot %d\n",
-//                 m_ronly_heap[i].m_heap_start,
-//                 m_ronly_heap[i].m_heap_len,
-//                 i);
+      m_ronly_heap[i].m_heap_len = (int)(b->end() - b->buf());
+      //          printf("Extending block at %X to %d in slot %d\n",
+      //                 m_ronly_heap[i].m_heap_start,
+      //                 m_ronly_heap[i].m_heap_len,
+      //                 i);
       return i;
     }
   }

@@ -27,9 +27,9 @@
   Generic event notify mechanism among threads.
 **************************************************************************/
 
-#include "EventNotify.h"
-#include "ink_hrtime.h"
-#include "ink_defs.h"
+#include "ts/EventNotify.h"
+#include "ts/ink_hrtime.h"
+#include "ts/ink_defs.h"
 
 #ifdef HAVE_EVENTFD
 #include <sys/eventfd.h>
@@ -44,16 +44,9 @@ EventNotify::EventNotify()
   struct epoll_event ev;
 
   m_event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-  if (m_event_fd < 0) {
-    // EFD_NONBLOCK/EFD_CLOEXEC invalid in <= Linux 2.6.27
-    m_event_fd = eventfd(0, 0);
-
-    fcntl(m_event_fd, F_SETFD, FD_CLOEXEC);
-    fcntl(m_event_fd, F_SETFL, O_NONBLOCK);
-  }
   ink_release_assert(m_event_fd != -1);
 
-  ev.events = EPOLLIN;
+  ev.events  = EPOLLIN;
   ev.data.fd = m_event_fd;
 
   m_epoll_fd = epoll_create(1);
@@ -92,7 +85,7 @@ EventNotify::wait(void)
   struct epoll_event ev;
 
   do {
-    nr_fd = epoll_wait(m_epoll_fd, &ev, 1, -1);
+    nr_fd = epoll_wait(m_epoll_fd, &ev, 1, 500000);
   } while (nr_fd == -1 && errno == EINTR);
 
   if (nr_fd == -1)
@@ -109,8 +102,7 @@ EventNotify::wait(void)
 #endif
 }
 
-int
-EventNotify::timedwait(int timeout) // milliseconds
+int EventNotify::timedwait(int timeout) // milliseconds
 {
 #ifdef HAVE_EVENTFD
   ssize_t nr, nr_fd = 0;
@@ -151,7 +143,7 @@ void
 EventNotify::lock(void)
 {
 #ifdef HAVE_EVENTFD
-  // do nothing
+// do nothing
 #else
   ink_mutex_acquire(&m_mutex);
 #endif
@@ -171,7 +163,7 @@ void
 EventNotify::unlock(void)
 {
 #ifdef HAVE_EVENTFD
-  // do nothing
+// do nothing
 #else
   ink_mutex_release(&m_mutex);
 #endif

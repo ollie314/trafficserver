@@ -27,7 +27,7 @@
  * file to ensure that it gets exported as a global symbol in TS
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "api/ts/InkAPIPrivateIOCore.h"
 #if defined(solaris) && !defined(__GNUC__)
 #include "P_EventSystem.h" // I_EventSystem.h
@@ -43,33 +43,34 @@
 #if TS_USE_FAST_SDK
 #define sdk_assert(EX) (void)(EX)
 #else
-#define sdk_assert(EX)                                          \
-  ( (void)((EX) ? (void)0 : _TSReleaseAssert(#EX, __FILE__, __LINE__)) )
+#define sdk_assert(EX) ((void)((EX) ? (void)0 : _TSReleaseAssert(#EX, __FILE__, __LINE__)))
 #endif
-
 
 TSReturnCode
 sdk_sanity_check_mutex(TSMutex mutex)
 {
-  if (mutex == NULL)
+  if (mutex == NULL) {
     return TS_ERROR;
+  }
 
-  ProxyMutex *mutexp = (ProxyMutex *) mutex;
+  ProxyMutex *mutexp = (ProxyMutex *)mutex;
 
-  if (mutexp->m_refcount < 0)
+  if (mutexp->refcount() < 0) {
     return TS_ERROR;
-  if (mutexp->nthread_holding < 0)
+  }
+  if (mutexp->nthread_holding < 0) {
     return TS_ERROR;
+  }
 
   return TS_SUCCESS;
 }
 
-
 TSReturnCode
 sdk_sanity_check_hostlookup_structure(TSHostLookupResult data)
 {
-  if (data == NULL)
+  if (data == NULL) {
     return TS_ERROR;
+  }
 
   return TS_SUCCESS;
 }
@@ -77,8 +78,9 @@ sdk_sanity_check_hostlookup_structure(TSHostLookupResult data)
 TSReturnCode
 sdk_sanity_check_iocore_structure(void *data)
 {
-  if (data == NULL)
+  if (data == NULL) {
     return TS_ERROR;
+  }
 
   return TS_SUCCESS;
 }
@@ -87,18 +89,13 @@ sdk_sanity_check_iocore_structure(void *data)
 TSReturnCode sdk_sanity_check_continuation(TSCont cont);
 TSReturnCode sdk_sanity_check_null_ptr(void *ptr);
 
-
 ////////////////////////////////////////////////////////////////////
 //
 // Threads
 //
 ////////////////////////////////////////////////////////////////////
-struct INKThreadInternal:public EThread
-{
-  INKThreadInternal()
-    : EThread(DEDICATED, -1)
-  {  }
-
+struct INKThreadInternal : public EThread {
+  INKThreadInternal() : EThread(DEDICATED, -1) {}
   TSThreadFunc func;
   void *data;
 };
@@ -109,7 +106,7 @@ ink_thread_trampoline(void *data)
   INKThreadInternal *thread;
   void *retval;
 
-  thread = (INKThreadInternal *) data;
+  thread = (INKThreadInternal *)data;
   thread->set_specific();
   retval = thread->func(thread->data);
   delete thread;
@@ -147,8 +144,9 @@ TSThreadInit()
   thread = new INKThreadInternal;
 
 #ifdef DEBUG
-  if (thread == NULL)
+  if (thread == NULL) {
     return (TSThread)NULL;
+  }
 #endif
 
   thread->set_specific();
@@ -172,7 +170,6 @@ TSThreadSelf(void)
   return ithread;
 }
 
-
 ////////////////////////////////////////////////////////////////////
 //
 // Mutexes
@@ -190,11 +187,12 @@ TSMutexCreate()
 }
 
 void
-TSMutexDestroy(TSMutex m) {
+TSMutexDestroy(TSMutex m)
+{
   sdk_assert(sdk_sanity_check_mutex(m) == TS_SUCCESS);
-  ink_release_assert(((ProxyMutex*)m)->refcount() == 0);
+  ink_release_assert(((ProxyMutex *)m)->refcount() == 0);
 
-  ((ProxyMutex*)m)->free();
+  ((ProxyMutex *)m)->free();
 }
 
 /* The following two APIs are for Into work, actually, APIs of Mutex
@@ -218,10 +216,12 @@ TSMutexCheck(TSMutex mutex)
 {
   ProxyMutex *mutexp = (ProxyMutex *)mutex;
 
-  if (mutexp->m_refcount < 0)
+  if (mutexp->refcount() < 0) {
     return -1;
-  if (mutexp->nthread_holding < 0)
+  }
+  if (mutexp->nthread_holding < 0) {
     return -1;
+  }
   return 1;
 }
 
@@ -231,7 +231,6 @@ TSMutexLock(TSMutex mutexp)
   sdk_assert(sdk_sanity_check_mutex(mutexp) == TS_SUCCESS);
   MUTEX_TAKE_LOCK((ProxyMutex *)mutexp, this_ethread());
 }
-
 
 TSReturnCode
 TSMutexLockTry(TSMutex mutexp)
@@ -291,7 +290,7 @@ TSVIONBytesSet(TSVIO viop, int64_t nbytes)
   sdk_assert(sdk_sanity_check_iocore_structure(viop) == TS_SUCCESS);
   sdk_assert(nbytes >= 0);
 
-  VIO *vio = (VIO *)viop;
+  VIO *vio    = (VIO *)viop;
   vio->nbytes = nbytes;
 }
 
@@ -310,7 +309,7 @@ TSVIONDoneSet(TSVIO viop, int64_t ndone)
   sdk_assert(sdk_sanity_check_iocore_structure(viop) == TS_SUCCESS);
   sdk_assert(ndone >= 0);
 
-  VIO *vio = (VIO *)viop;
+  VIO *vio   = (VIO *)viop;
   vio->ndone = ndone;
 }
 
@@ -329,7 +328,7 @@ TSVIOContGet(TSVIO viop)
   sdk_assert(sdk_sanity_check_iocore_structure(viop) == TS_SUCCESS);
 
   VIO *vio = (VIO *)viop;
-  return (TSCont) vio->_cont;
+  return (TSCont)vio->_cont;
 }
 
 TSVConn
@@ -347,7 +346,7 @@ TSVIOMutexGet(TSVIO viop)
   sdk_assert(sdk_sanity_check_iocore_structure(viop) == TS_SUCCESS);
 
   VIO *vio = (VIO *)viop;
-  return (TSMutex)((ProxyMutex *)vio->mutex);
+  return (TSMutex)(vio->mutex.get());
 }
 
 /* High Resolution Time */
@@ -355,7 +354,7 @@ TSVIOMutexGet(TSVIO viop)
 ink_hrtime
 INKBasedTimeGet()
 {
-  return ink_get_based_hrtime();
+  return Thread::get_hrtime();
 }
 
 /* UDP Connection Interface */
@@ -365,12 +364,13 @@ INKUDPBind(TSCont contp, unsigned int ip, int port)
 {
   sdk_assert(sdk_sanity_check_continuation(contp) == TS_SUCCESS);
 
-  FORCE_PLUGIN_MUTEX(contp);
+  FORCE_PLUGIN_SCOPED_MUTEX(contp);
 
   struct sockaddr_in addr;
   ats_ip4_set(&addr, ip, htons(port));
 
-  return reinterpret_cast<TSAction>(udpNet.UDPBind((Continuation *)contp, ats_ip_sa_cast(&addr), INK_ETHERNET_MTU_SIZE, INK_ETHERNET_MTU_SIZE));
+  return reinterpret_cast<TSAction>(
+    udpNet.UDPBind((Continuation *)contp, ats_ip_sa_cast(&addr), INK_ETHERNET_MTU_SIZE, INK_ETHERNET_MTU_SIZE));
 }
 
 TSAction
@@ -378,8 +378,8 @@ INKUDPSendTo(TSCont contp, INKUDPConn udp, unsigned int ip, int port, char *data
 {
   sdk_assert(sdk_sanity_check_continuation(contp) == TS_SUCCESS);
 
-  FORCE_PLUGIN_MUTEX(contp);
-  UDPPacket *packet = new_UDPPacket();
+  FORCE_PLUGIN_SCOPED_MUTEX(contp);
+  UDPPacket *packet   = new_UDPPacket();
   UDPConnection *conn = (UDPConnection *)udp;
 
   ats_ip4_set(&packet->to, ip, htons(port));
@@ -403,13 +403,12 @@ INKUDPSendTo(TSCont contp, INKUDPConn udp, unsigned int ip, int port, char *data
   return reinterpret_cast<TSAction>(conn->send((Continuation *)contp, packet));
 }
 
-
 TSAction
 INKUDPRecvFrom(TSCont contp, INKUDPConn udp)
 {
   sdk_assert(sdk_sanity_check_continuation(contp) == TS_SUCCESS);
 
-  FORCE_PLUGIN_MUTEX(contp);
+  FORCE_PLUGIN_SCOPED_MUTEX(contp);
   UDPConnection *conn = (UDPConnection *)udp;
   return reinterpret_cast<TSAction>(conn->recv((Continuation *)contp));
 }
@@ -432,7 +431,7 @@ INKUDPPacketCreate()
 TSIOBufferBlock
 INKUDPPacketBufferBlockGet(INKUDPPacket packet)
 {
-  sdk_assert(sdk_sanity_check_null_ptr((void*)packet) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)packet) == TS_SUCCESS);
 
   UDPPacket *p = (UDPPacket *)packet;
   return ((TSIOBufferBlock)p->getIOBlockChain());
@@ -441,7 +440,7 @@ INKUDPPacketBufferBlockGet(INKUDPPacket packet)
 unsigned int
 INKUDPPacketFromAddressGet(INKUDPPacket packet)
 {
-  sdk_assert(sdk_sanity_check_null_ptr((void*)packet) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)packet) == TS_SUCCESS);
 
   UDPPacket *p = (UDPPacket *)packet;
   return ats_ip4_addr_cast(&p->from);
@@ -450,7 +449,7 @@ INKUDPPacketFromAddressGet(INKUDPPacket packet)
 int
 INKUDPPacketFromPortGet(INKUDPPacket packet)
 {
-  sdk_assert(sdk_sanity_check_null_ptr((void*)packet) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)packet) == TS_SUCCESS);
 
   UDPPacket *p = (UDPPacket *)packet;
   return ats_ip_port_host_order(&p->from);
@@ -459,7 +458,7 @@ INKUDPPacketFromPortGet(INKUDPPacket packet)
 INKUDPConn
 INKUDPPacketConnGet(INKUDPPacket packet)
 {
-  sdk_assert(sdk_sanity_check_null_ptr((void*)packet) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)packet) == TS_SUCCESS);
 
   UDPPacket *p = (UDPPacket *)packet;
   return ((INKUDPConn)p->getConnection());
@@ -468,7 +467,7 @@ INKUDPPacketConnGet(INKUDPPacket packet)
 void
 INKUDPPacketDestroy(INKUDPPacket packet)
 {
-  sdk_assert(sdk_sanity_check_null_ptr((void*)packet) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)packet) == TS_SUCCESS);
 
   UDPPacket *p = (UDPPacket *)packet;
   p->free();
@@ -489,7 +488,6 @@ INKUDPPacketGet(INKUDPacketQueue queuep)
 
   return NULL;
 }
-
 
 /* Buffers */
 
@@ -527,15 +525,16 @@ TSIOBufferStart(TSIOBuffer bufp)
 {
   sdk_assert(sdk_sanity_check_iocore_structure(bufp) == TS_SUCCESS);
 
-  MIOBuffer *b = (MIOBuffer *)bufp;
+  MIOBuffer *b       = (MIOBuffer *)bufp;
   IOBufferBlock *blk = b->get_current_block();
 
-  if (!blk || (blk->write_avail() == 0))
+  if (!blk || (blk->write_avail() == 0)) {
     b->add_block();
+  }
   blk = b->get_current_block();
 
   // TODO: Remove when memory allocations can't fail.
-  sdk_assert(sdk_sanity_check_null_ptr((void*)blk) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)blk) == TS_SUCCESS);
 
   return (TSIOBufferBlock)blk;
 }
@@ -547,7 +546,7 @@ TSIOBufferCopy(TSIOBuffer bufp, TSIOBufferReader readerp, int64_t length, int64_
   sdk_assert(sdk_sanity_check_iocore_structure(readerp) == TS_SUCCESS);
   sdk_assert((length >= 0) && (offset >= 0));
 
-  MIOBuffer *b = (MIOBuffer *)bufp;
+  MIOBuffer *b      = (MIOBuffer *)bufp;
   IOBufferReader *r = (IOBufferReader *)readerp;
 
   return b->write(r, length, offset);
@@ -557,7 +556,7 @@ int64_t
 TSIOBufferWrite(TSIOBuffer bufp, const void *buf, int64_t length)
 {
   sdk_assert(sdk_sanity_check_iocore_structure(bufp) == TS_SUCCESS);
-  sdk_assert(sdk_sanity_check_null_ptr((void*)buf) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)buf) == TS_SUCCESS);
   sdk_assert(length >= 0);
 
   MIOBuffer *b = (MIOBuffer *)bufp;
@@ -598,7 +597,7 @@ TSIOBufferBlockNext(TSIOBufferBlock blockp)
   sdk_assert(sdk_sanity_check_iocore_structure(blockp) == TS_SUCCESS);
 
   IOBufferBlock *blk = (IOBufferBlock *)blockp;
-  return (TSIOBufferBlock)((IOBufferBlock *)blk->next);
+  return (TSIOBufferBlock)(blk->next.get());
 }
 
 // dev API, not exposed
@@ -617,15 +616,16 @@ TSIOBufferBlockReadStart(TSIOBufferBlock blockp, TSIOBufferReader readerp, int64
   sdk_assert(sdk_sanity_check_iocore_structure(blockp) == TS_SUCCESS);
   sdk_assert(sdk_sanity_check_iocore_structure(readerp) == TS_SUCCESS);
 
-  IOBufferBlock *blk = (IOBufferBlock *)blockp;
+  IOBufferBlock *blk     = (IOBufferBlock *)blockp;
   IOBufferReader *reader = (IOBufferReader *)readerp;
   char *p;
 
   p = blk->start();
-  if (avail)
+  if (avail) {
     *avail = blk->read_avail();
+  }
 
-  if (blk == reader->block) {
+  if (reader->block.get() == blk) {
     p += reader->start_offset;
     if (avail) {
       *avail -= reader->start_offset;
@@ -644,13 +644,13 @@ TSIOBufferBlockReadAvail(TSIOBufferBlock blockp, TSIOBufferReader readerp)
   sdk_assert(sdk_sanity_check_iocore_structure(blockp) == TS_SUCCESS);
   sdk_assert(sdk_sanity_check_iocore_structure(readerp) == TS_SUCCESS);
 
-  IOBufferBlock *blk = (IOBufferBlock *)blockp;
+  IOBufferBlock *blk     = (IOBufferBlock *)blockp;
   IOBufferReader *reader = (IOBufferReader *)readerp;
   int64_t avail;
 
   avail = blk->read_avail();
 
-  if (blk == reader->block) {
+  if (reader->block.get() == blk) {
     avail -= reader->start_offset;
     if (avail < 0) {
       avail = 0;
@@ -667,8 +667,9 @@ TSIOBufferBlockWriteStart(TSIOBufferBlock blockp, int64_t *avail)
 
   IOBufferBlock *blk = (IOBufferBlock *)blockp;
 
-  if (avail)
+  if (avail) {
     *avail = blk->write_avail();
+  }
   return blk->end();
 }
 
@@ -696,7 +697,7 @@ TSIOBufferWaterMarkSet(TSIOBuffer bufp, int64_t water_mark)
   sdk_assert(sdk_sanity_check_iocore_structure(bufp) == TS_SUCCESS);
   sdk_assert(water_mark >= 0);
 
-  MIOBuffer *b = (MIOBuffer *)bufp;
+  MIOBuffer *b  = (MIOBuffer *)bufp;
   b->water_mark = water_mark;
 }
 
@@ -705,11 +706,11 @@ TSIOBufferReaderAlloc(TSIOBuffer bufp)
 {
   sdk_assert(sdk_sanity_check_iocore_structure(bufp) == TS_SUCCESS);
 
-  MIOBuffer *b = (MIOBuffer *)bufp;
+  MIOBuffer *b             = (MIOBuffer *)bufp;
   TSIOBufferReader readerp = (TSIOBufferReader)b->alloc_reader();
 
   // TODO: Should remove this when memory allocation can't fail.
-  sdk_assert(sdk_sanity_check_null_ptr((void*)readerp) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_null_ptr((void *)readerp) == TS_SUCCESS);
   return readerp;
 }
 
@@ -738,8 +739,10 @@ TSIOBufferReaderStart(TSIOBufferReader readerp)
 
   IOBufferReader *r = (IOBufferReader *)readerp;
 
-  if (r->block != NULL)
+  if (r->block) {
     r->skip_empty_blocks();
+  }
+
   return reinterpret_cast<TSIOBufferBlock>(r->get_current_block());
 }
 

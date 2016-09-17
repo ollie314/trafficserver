@@ -27,7 +27,10 @@
 
 
 ***************************************************************************/
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_string.h"
+#include "ts/ink_inet.h"
 
 //
 // Compilation options
@@ -35,13 +38,12 @@
 
 // #define CHECK_PLAUSIBILITY_OF_SOCKADDR
 
-
 #ifdef CHECK_PLAUSIBILITY_OF_SOCKADDR
-#define CHECK_PLAUSIBLE_SOCKADDR(_n,_f,_l) check_plausible_sockaddr(_n,_f,_n)
+#define CHECK_PLAUSIBLE_SOCKADDR(_n, _f, _l) check_plausible_sockaddr(_n, _f, _n)
 inline void
-check_valid_sockaddr(sockaddr * sa, char *file, int line)
+check_valid_sockaddr(sockaddr *sa, char *file, int line)
 {
-  sockaddr_in *si = (sockaddr_in *) sa;
+  sockaddr_in *si     = (sockaddr_in *)sa;
   unsigned short port = ntohs(si->sin_port);
   unsigned short addr = ntohl(si->sin_addr.s_addr);
 
@@ -52,7 +54,7 @@ check_valid_sockaddr(sockaddr * sa, char *file, int line)
   }
 }
 #else
-#define CHECK_PLAUSIBLE_SOCKADDR(_n,_f,_l)
+#define CHECK_PLAUSIBLE_SOCKADDR(_n, _f, _l)
 #endif
 
 int
@@ -70,7 +72,7 @@ safe_getsockopt(int s, int level, int optname, char *optval, int *optlevel)
 {
   int r;
   do {
-    r = getsockopt(s, level, optname, optval, (socklen_t *) optlevel);
+    r = getsockopt(s, level, optname, optval, (socklen_t *)optlevel);
   } while (r < 0 && (errno == EAGAIN || errno == EINTR));
   return r;
 }
@@ -120,12 +122,12 @@ safe_blocking(int fd)
 }
 
 int
-write_ready(int fd)
+write_ready(int fd, int timeout_msec)
 {
   struct pollfd p;
   p.events = POLLOUT;
-  p.fd = fd;
-  int r = poll(&p, 1, 0);
+  p.fd     = fd;
+  int r    = poll(&p, 1, timeout_msec);
   if (r <= 0)
     return r;
   if (p.revents & (POLLERR | POLLNVAL))
@@ -136,12 +138,12 @@ write_ready(int fd)
 }
 
 int
-read_ready(int fd)
+read_ready(int fd, int timeout_msec)
 {
   struct pollfd p;
   p.events = POLLIN;
-  p.fd = fd;
-  int r = poll(&p, 1, 0);
+  p.fd     = fd;
+  int r    = poll(&p, 1, timeout_msec);
   if (r <= 0)
     return r;
   if (p.revents & (POLLERR | POLLNVAL))
@@ -162,7 +164,7 @@ safe_ioctl(int fd, int request, char *arg)
 }
 
 int
-safe_bind(int s, struct sockaddr const* name, int namelen)
+safe_bind(int s, struct sockaddr const *name, int namelen)
 {
   int r;
   CHECK_PLAUSIBLE_SOCKADDR(name, __FILE__, __LINE__);
@@ -187,7 +189,7 @@ safe_getsockname(int s, struct sockaddr *name, int *namelen)
 {
   int r;
   do {
-    r = getsockname(s, name, (socklen_t *) namelen);
+    r = getsockname(s, name, (socklen_t *)namelen);
   } while (r < 0 && (errno == EAGAIN || errno == EINTR));
   return r;
 }
@@ -197,7 +199,7 @@ safe_getpeername(int s, struct sockaddr *name, int *namelen)
 {
   int r;
   do {
-    r = getpeername(s, name, (socklen_t*)namelen);
+    r = getpeername(s, name, (socklen_t *)namelen);
   } while (r < 0 && (errno == EAGAIN || errno == EINTR));
   return r;
 }
@@ -222,7 +224,7 @@ fd_read_line(int fd, char *s, int len)
 {
   char c;
   int numread = 0, r;
-  //char *buf = s;
+  // char *buf = s;
   do {
     do
       r = read(fd, &c, 1);
@@ -244,7 +246,6 @@ fd_read_line(int fd, char *s, int len)
   return numread;
 }
 
-
 int
 close_socket(int s)
 {
@@ -254,11 +255,64 @@ close_socket(int s)
 int
 write_socket(int s, const char *buffer, int length)
 {
-  return write(s, (const void *) buffer, length);
+  return write(s, (const void *)buffer, length);
 }
 
 int
 read_socket(int s, char *buffer, int length)
 {
-  return read(s, (void *) buffer, length);
+  return read(s, (void *)buffer, length);
+}
+
+int
+bind_unix_domain_socket(const char *path, mode_t mode)
+{
+  int sockfd;
+  struct sockaddr_un sockaddr;
+  socklen_t socklen;
+
+  (void)unlink(path);
+
+  sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (sockfd < 0) {
+    return sockfd;
+  }
+
+  ink_zero(sockaddr);
+  sockaddr.sun_family = AF_UNIX;
+  ink_strlcpy(sockaddr.sun_path, path, sizeof(sockaddr.sun_path));
+
+#if defined(darwin) || defined(freebsd)
+  socklen = sizeof(struct sockaddr_un);
+#else
+  socklen = strlen(sockaddr.sun_path) + sizeof(sockaddr.sun_family);
+#endif
+
+  if (safe_setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, SOCKOPT_ON, sizeof(int)) < 0) {
+    goto fail;
+  }
+
+  if (safe_fcntl(sockfd, F_SETFD, FD_CLOEXEC) < 0) {
+    goto fail;
+  }
+
+  if (bind(sockfd, (struct sockaddr *)&sockaddr, socklen) < 0) {
+    goto fail;
+  }
+
+  if (chmod(path, mode) < 0) {
+    goto fail;
+  }
+
+  if (listen(sockfd, 5) < 0) {
+    goto fail;
+  }
+
+  return sockfd;
+
+fail:
+  int errsav = errno;
+  close(sockfd);
+  errno = errsav;
+  return -1;
 }

@@ -22,32 +22,33 @@
  */
 
 #include "traffic_crashlog.h"
-#include "ink_args.h"
-#include "ink_cap.h"
-#include "I_Version.h"
-#include "I_Layout.h"
+#include "ts/ink_args.h"
+#include "ts/ink_cap.h"
+#include "ts/I_Version.h"
+#include "ts/I_Layout.h"
+#include "ts/ink_syslog.h"
 #include "I_RecProcess.h"
 #include "RecordsConfig.h"
+#include "ts/BaseLogFile.h"
 
-static int syslog_mode = false;
-static int debug_mode = false;
-static int wait_mode = false;
-static char * host_triplet = NULL;
-static int  target_pid = getppid();
+static int syslog_mode    = false;
+static int debug_mode     = false;
+static int wait_mode      = false;
+static char *host_triplet = NULL;
+static int target_pid     = getppid();
 
 // If pid_t is not sizeof(int), we will have to jiggle argument parsing.
 extern char __pid_size_static_assert[sizeof(pid_t) == sizeof(int) ? 0 : -1];
 
 static AppVersionInfo appVersionInfo;
 static const ArgumentDescription argument_descriptions[] = {
-  { "target", '-', "Target process ID", "I", &target_pid, NULL, NULL },
-  { "host", '-', "Host triplet for the process being logged", "S*", &host_triplet, NULL, NULL },
-  { "wait", '-', "Stop until signalled at startup", "F", &wait_mode, NULL, NULL },
-  { "syslog", '-', "Syslog after writing a crash log", "F", &syslog_mode, NULL, NULL },
-  { "debug", '-', "Enable debugging mode", "F", &debug_mode, NULL, NULL },
+  {"target", '-', "Target process ID", "I", &target_pid, NULL, NULL},
+  {"host", '-', "Host triplet for the process being logged", "S*", &host_triplet, NULL, NULL},
+  {"wait", '-', "Stop until signalled at startup", "F", &wait_mode, NULL, NULL},
+  {"syslog", '-', "Syslog after writing a crash log", "F", &syslog_mode, NULL, NULL},
+  {"debug", '-', "Enable debugging mode", "F", &debug_mode, NULL, NULL},
   HELP_ARGUMENT_DESCRIPTION(),
-  VERSION_ARGUMENT_DESCRIPTION()
-};
+  VERSION_ARGUMENT_DESCRIPTION()};
 
 static struct tm
 timestamp()
@@ -62,10 +63,10 @@ timestamp()
 static char *
 crashlog_name()
 {
-  char            filename[64];
-  struct tm       now = timestamp();
-  ats_scoped_str  logdir(RecConfigReadLogDir());
-  ats_scoped_str  pathname;
+  char filename[64];
+  struct tm now = timestamp();
+  ats_scoped_str logdir(RecConfigReadLogDir());
+  ats_scoped_str pathname;
 
   strftime(filename, sizeof(filename), "crash-%Y-%m-%d-%H%M%S.log", &now);
   pathname = Layout::relative_to(logdir, filename);
@@ -74,7 +75,7 @@ crashlog_name()
 }
 
 static FILE *
-crashlog_open(const char * path)
+crashlog_open(const char *path)
 {
   int fd;
 
@@ -83,17 +84,17 @@ crashlog_open(const char * path)
 }
 
 int
-main(int /* argc ATS_UNUSED */, char **argv)
+main(int /* argc ATS_UNUSED */, const char **argv)
 {
-  FILE * fp;
-  char * logname;
+  FILE *fp;
+  char *logname;
   TSMgmtError mgmterr;
   crashlog_target target;
+  pid_t parent = getppid();
 
-  diags = new Diags("" /* tags */, "" /* actions */, stderr);
+  diags = new Diags("" /* tags */, "" /* actions */, new BaseLogFile("stderr"));
 
-  appVersionInfo.setup(PACKAGE_NAME, "traffic_crashlog", PACKAGE_VERSION,
-          __DATE__, __TIME__, BUILD_MACHINE, BUILD_PERSON, "");
+  appVersionInfo.setup(PACKAGE_NAME, "traffic_crashlog", PACKAGE_VERSION, __DATE__, __TIME__, BUILD_MACHINE, BUILD_PERSON, "");
 
   // Process command line arguments and dump into variables
   process_args(&appVersionInfo, argument_descriptions, countof(argument_descriptions), argv);
@@ -101,6 +102,12 @@ main(int /* argc ATS_UNUSED */, char **argv)
   if (wait_mode) {
     EnableDeathSignal(SIGKILL);
     kill(getpid(), SIGSTOP);
+  }
+
+  // If our parent changed, then we were woken after traffic_server exited. There's no point trying to
+  // emit a crashlog because traffic_server is gone.
+  if (getppid() != parent) {
+    return 0;
   }
 
   // XXX This is a hack. traffic_manager starts traffic_server with the euid of the admin user. We are still
@@ -128,29 +135,28 @@ main(int /* argc ATS_UNUSED */, char **argv)
     }
 
     openlog(appVersionInfo.AppStr, LOG_PID | LOG_NDELAY | LOG_NOWAIT, facility);
-    diags->config.outputs[DL_Debug].to_syslog = true;
-    diags->config.outputs[DL_Status].to_syslog = true;
-    diags->config.outputs[DL_Note].to_syslog = true;
-    diags->config.outputs[DL_Warning].to_syslog = true;
-    diags->config.outputs[DL_Error].to_syslog = true;
-    diags->config.outputs[DL_Fatal].to_syslog = true;
-    diags->config.outputs[DL_Alert].to_syslog = true;
+    diags->config.outputs[DL_Debug].to_syslog     = true;
+    diags->config.outputs[DL_Status].to_syslog    = true;
+    diags->config.outputs[DL_Note].to_syslog      = true;
+    diags->config.outputs[DL_Warning].to_syslog   = true;
+    diags->config.outputs[DL_Error].to_syslog     = true;
+    diags->config.outputs[DL_Fatal].to_syslog     = true;
+    diags->config.outputs[DL_Alert].to_syslog     = true;
     diags->config.outputs[DL_Emergency].to_syslog = true;
   }
 
-  Note("crashlog started, target=%ld, debug=%s syslog=%s, uid=%ld euid=%ld",
-      (long)target_pid, debug_mode ? "true" : "false", syslog_mode ? "true" : "false",
-      (long)getuid(), (long)geteuid());
+  Note("crashlog started, target=%ld, debug=%s syslog=%s, uid=%ld euid=%ld", (long)target_pid, debug_mode ? "true" : "false",
+       syslog_mode ? "true" : "false", (long)getuid(), (long)geteuid());
 
   mgmterr = TSInit(NULL, (TSInitOptionT)(TS_MGMT_OPT_NO_EVENTS | TS_MGMT_OPT_NO_SOCK_TESTS));
   if (mgmterr != TS_ERR_OKAY) {
-    char * msg = TSGetErrorMessage(mgmterr);
+    char *msg = TSGetErrorMessage(mgmterr);
     Warning("failed to intialize management API: %s", msg);
     TSfree(msg);
   }
 
   ink_zero(target);
-  target.pid = (pid_t)target_pid;
+  target.pid       = (pid_t)target_pid;
   target.timestamp = timestamp();
 
   if (host_triplet && strncmp(host_triplet, "x86_64-unknown-linux", sizeof("x86_64-unknown-linux") - 1) == 0) {

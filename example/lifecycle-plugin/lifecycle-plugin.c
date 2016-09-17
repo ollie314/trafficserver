@@ -27,12 +27,13 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <ts/ts.h>
 
 int
-CallbackHandler(TSCont this, TSEvent id, void* no_data) {
-  (void) this;
-  (void) no_data;
+CallbackHandler(TSCont this, TSEvent id, void *data)
+{
+  (void)this; // make compiler shut up about unused variable.
   switch (id) {
   case TS_EVENT_LIFECYCLE_PORTS_INITIALIZED:
     TSDebug("lifecycle-plugin", "Proxy ports initialized");
@@ -43,6 +44,11 @@ CallbackHandler(TSCont this, TSEvent id, void* no_data) {
   case TS_EVENT_LIFECYCLE_CACHE_READY:
     TSDebug("lifecycle-plugin", "Cache ready");
     break;
+  case TS_EVENT_LIFECYCLE_MSG: {
+    TSPluginMsg *msg = (TSPluginMsg *)data;
+    TSDebug("lifecycle-plugin", "Message to '%s' - %zu bytes of data", msg->tag, msg->data_size);
+    break;
+  }
   default:
     TSDebug("lifecycle-plugin", "Unexpected event %d", id);
     break;
@@ -54,7 +60,7 @@ int
 CheckVersion()
 {
   const char *ts_version = TSTrafficServerVersionGet();
-  int result = 0;
+  int result             = 0;
 
   if (ts_version) {
     int major_ts_version = 0;
@@ -67,9 +73,7 @@ CheckVersion()
 
     /* Need at least TS 3.3.5 */
     if (major_ts_version > 3 ||
-	(major_ts_version == 3 &&
-	 (minor_ts_version > 3 ||
-	  (minor_ts_version == 3 && patch_ts_version >= 5)))) {
+        (major_ts_version == 3 && (minor_ts_version > 3 || (minor_ts_version == 3 && patch_ts_version >= 5)))) {
       result = 1;
     }
   }
@@ -85,17 +89,19 @@ TSPluginInit(int argc, const char *argv[])
   (void)argc;
   (void)argv;
 
-  info.plugin_name = "lifecycle-plugin";
-  info.vendor_name = "My Company";
+  info.plugin_name   = "lifecycle-plugin";
+  info.vendor_name   = "My Company";
   info.support_email = "ts-api-support@MyCompany.com";
 
-  if (TSPluginRegister(TS_SDK_VERSION_3_0, &info) != TS_SUCCESS) {
-    TSError("[lifecycle-plugin] Plugin registration failed.\n");
+  if (TSPluginRegister(&info) != TS_SUCCESS) {
+    TSError("[lifecycle-plugin] Plugin registration failed.");
+
     goto Lerror;
   }
 
   if (!CheckVersion()) {
-    TSError("[lifecycle-plugin] Plugin requires Traffic Server 3.3.5 " "or later\n");
+    TSError("[lifecycle-plugin] Plugin requires Traffic Server 3.3.5 "
+            "or later");
     goto Lerror;
   }
 
@@ -104,11 +110,12 @@ TSPluginInit(int argc, const char *argv[])
   TSLifecycleHookAdd(TS_LIFECYCLE_PORTS_INITIALIZED_HOOK, cb);
   TSLifecycleHookAdd(TS_LIFECYCLE_PORTS_READY_HOOK, cb);
   TSLifecycleHookAdd(TS_LIFECYCLE_CACHE_READY_HOOK, cb);
+  TSLifecycleHookAdd(TS_LIFECYCLE_MSG_HOOK, cb);
 
   TSDebug("lifecycle-plugin", "online");
 
   return;
 
 Lerror:
-  TSError("[amc-tranform] Unable to initialize plugin (disabled).\n");
+  TSError("[lifecycle-plugin] Unable to initialize plugin (disabled).");
 }

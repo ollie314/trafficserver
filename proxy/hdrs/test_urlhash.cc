@@ -21,28 +21,21 @@
   limitations under the License.
  */
 
-
-
 #include <stdlib.h>
 #include <string.h>
 
-#include "Arena.h"
+#include "ts/Arena.h"
 #include "HTTP.h"
 #include "MIME.h"
-#include "Regex.h"
+#include "ts/Regex.h"
 #include "URL.h"
 #include "HttpCompat.h"
 
 static void
 test_url()
 {
-  url_hash_method = 1;
-
-  static const char *strs[] = {
-    "http://npdev:19080/1.6664000000/4000",
-    "http://npdev:19080/1.8666000000/4000"
-  };
-  static int nstrs = sizeof(strs) / sizeof(strs[0]);
+  static const char *strs[] = {"http://npdev:19080/1.6664000000/4000", "http://npdev:19080/1.8666000000/4000"};
+  static int nstrs          = sizeof(strs) / sizeof(strs[0]);
 
   int err, failed;
   URL url;
@@ -53,8 +46,8 @@ test_url()
   failed = 0;
   for (i = 0; i < nstrs; i++) {
     old_length = strlen(strs[i]);
-    start = strs[i];
-    end = start + old_length;
+    start      = strs[i];
+    end        = start + old_length;
 
     url.create(NULL);
     err = url.parse(&start, end);
@@ -65,8 +58,8 @@ test_url()
 
     INK_MD5 md5;
     url.MD5_get(&md5);
-    //url_MD5_get(url.m_url_impl, &md5);
-    unsigned int *h = (unsigned int *) &md5;
+    // url_MD5_get(url.m_url_impl, &md5);
+    unsigned int *h = (unsigned int *)&md5;
     printf("(%s)\n", strs[i]);
     printf("%X %X %X %X\n", h[0], h[1], h[2], h[3]);
 

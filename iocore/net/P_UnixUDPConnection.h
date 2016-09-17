@@ -34,11 +34,11 @@
 #include "P_UDPConnection.h"
 #include "P_UDPPacket.h"
 
-class UnixUDPConnection:public UDPConnectionInternal
+class UnixUDPConnection : public UDPConnectionInternal
 {
 public:
   void init(int the_fd);
-  void setEthread(EThread * e);
+  void setEthread(EThread *e);
   void errorAndDie(int e);
   int callbackHandler(int event, void *data);
 
@@ -53,41 +53,38 @@ public:
   EventIO ep;
 
   UnixUDPConnection(int the_fd);
-  virtual ~ UnixUDPConnection();
+  virtual ~UnixUDPConnection();
+
 private:
   int m_errno;
-  virtual void UDPConnection_is_abstract() {};
+  virtual void UDPConnection_is_abstract(){};
 };
 
 TS_INLINE
-UnixUDPConnection::UnixUDPConnection(int the_fd)
-  : onCallbackQueue(0)
-  , callbackAction(NULL)
-  , ethread(NULL)
-  , m_errno(0)
+UnixUDPConnection::UnixUDPConnection(int the_fd) : onCallbackQueue(0), callbackAction(NULL), ethread(NULL), m_errno(0)
 {
   fd = the_fd;
   UDPPacketInternal p;
-  ink_atomiclist_init(&inQueue, "Incoming UDP Packet queue", (char *) &p.alink.next - (char *) &p);
+  ink_atomiclist_init(&inQueue, "Incoming UDP Packet queue", (char *)&p.alink.next - (char *)&p);
   SET_HANDLER(&UnixUDPConnection::callbackHandler);
 }
 
 TS_INLINE void
 UnixUDPConnection::init(int the_fd)
 {
-  fd = the_fd;
+  fd              = the_fd;
   onCallbackQueue = 0;
-  callbackAction = NULL;
-  ethread = NULL;
-  m_errno = 0;
+  callbackAction  = NULL;
+  ethread         = NULL;
+  m_errno         = 0;
 
   UDPPacketInternal p;
-  ink_atomiclist_init(&inQueue, "Incoming UDP Packet queue", (char *) &p.alink.next - (char *) &p);
+  ink_atomiclist_init(&inQueue, "Incoming UDP Packet queue", (char *)&p.alink.next - (char *)&p);
   SET_HANDLER(&UnixUDPConnection::callbackHandler);
 }
 
 TS_INLINE void
-UnixUDPConnection::setEthread(EThread * e)
+UnixUDPConnection::setEthread(EThread *e)
 {
   ethread = e;
 }
@@ -99,17 +96,16 @@ UnixUDPConnection::errorAndDie(int e)
 }
 
 TS_INLINE Action *
-UDPConnection::recv(Continuation * c)
+UDPConnection::recv(Continuation *c)
 {
-  UnixUDPConnection *p = (UnixUDPConnection *) this;
+  UnixUDPConnection *p = (UnixUDPConnection *)this;
   // register callback interest.
   p->continuation = c;
   ink_assert(c != NULL);
-  mutex = c->mutex;
+  mutex         = c->mutex;
   p->recvActive = 1;
   return ACTION_RESULT_NONE;
 }
-
 
 TS_INLINE UDPConnection *
 new_UDPConnection(int fd)

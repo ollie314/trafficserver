@@ -25,13 +25,57 @@
 
   SocketManager.cc
  ****************************************************************************/
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_EventSystem.h"
 
 SocketManager socketManager;
 
-SocketManager::SocketManager()
-  : pagesize(ats_pagesize())
+#if !HAVE_ACCEPT4
+static int
+accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags)
+{
+  int fd, err;
+
+  do {
+    fd = accept(sockfd, addr, addrlen);
+    if (likely(fd >= 0))
+      break;
+  } while (transient_error());
+
+  if ((fd >= 0) && (flags & SOCK_CLOEXEC) && (safe_fcntl(fd, F_SETFD, FD_CLOEXEC) < 0)) {
+    err = errno;
+    close(fd);
+    errno = err;
+    return -1;
+  }
+
+  if ((fd >= 0) && (flags & SOCK_NONBLOCK) && (safe_nonblocking(fd) < 0)) {
+    err = errno;
+    close(fd);
+    errno = err;
+    return -1;
+  }
+
+  return fd;
+}
+#endif
+
+int
+SocketManager::accept4(int s, struct sockaddr *addr, socklen_t *addrlen, int flags)
+{
+  int fd;
+
+  do {
+    fd = ::accept4(s, addr, addrlen, flags);
+    if (likely(fd >= 0)) {
+      return fd;
+    }
+  } while (transient_error());
+
+  return -errno;
+}
+
+SocketManager::SocketManager() : pagesize(ats_pagesize())
 {
 }
 
@@ -41,9 +85,9 @@ SocketManager::~SocketManager()
 }
 
 int
-SocketManager::ink_bind(int s, struct sockaddr const* name, int namelen, short Proto)
+SocketManager::ink_bind(int s, struct sockaddr const *name, int namelen, short Proto)
 {
-  (void) Proto;
+  (void)Proto;
   return safe_bind(s, name, namelen);
 }
 

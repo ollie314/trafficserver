@@ -16,6 +16,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+include $(top_srcdir)/build/tidy.mk
+
 SUBDIRS = remap
 
 AM_CPPFLAGS = \
@@ -23,16 +25,14 @@ AM_CPPFLAGS = \
   -I$(top_srcdir)/proxy/api/ts \
   -I$(top_srcdir)/proxy \
   -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib \
   -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
   -I$(top_srcdir)/mgmt \
   -I$(top_srcdir)/mgmt/utils \
   -I$(top_srcdir)/proxy/hdrs \
   -I$(top_srcdir)/proxy/shared \
   -I$(top_srcdir)/proxy/http/remap \
   -I$(top_srcdir)/proxy/logging \
-  -I$(top_srcdir)/proxy/spdy
+  -I$(top_srcdir)/proxy/http2
 
 noinst_HEADERS = HttpProxyServerMain.h
 noinst_LIBRARIES = libhttp.a
@@ -44,8 +44,10 @@ libhttp_a_SOURCES = \
   HttpBodyFactory.h \
   HttpCacheSM.cc \
   HttpCacheSM.h \
-  HttpClientSession.cc \
-  HttpClientSession.h \
+  Http1ClientSession.cc \
+  Http1ClientSession.h \
+  Http1ClientTransaction.cc \
+  Http1ClientTransaction.h \
   HttpConfig.cc \
   HttpConfig.h \
   HttpConnectionCount.cc \
@@ -77,6 +79,9 @@ if BUILD_TESTS
   libhttp_a_SOURCES += HttpUpdateTester.cc \
     RegressionHttpTransact.cc
 endif
+
+tidy-local: $(libhttp_a_SOURCES) $(noinst_HEADERS)
+	$(CXX_Clang_Tidy)
 
 #test_UNUSED_SOURCES = \
 #  TestHttpTransact.cc \

@@ -21,21 +21,14 @@
   limitations under the License.
  */
 
-
-#if !defined ( P_VIO_h)
-#define  P_VIO_h
+#if !defined(P_VIO_h)
+#define P_VIO_h
 #include "I_VIO.h"
 
 TS_INLINE
-VIO::VIO(int aop)
-  :_cont(NULL),
-   nbytes(0),
-   ndone(0),
-   op(aop),
-   buffer(),
-   vc_server(0),
-   mutex(0)
-{ }
+VIO::VIO(int aop) : _cont(NULL), nbytes(0), ndone(0), op(aop), buffer(), vc_server(0), mutex(0)
+{
+}
 
 /////////////////////////////////////////////////////////////
 //
@@ -43,15 +36,9 @@ VIO::VIO(int aop)
 //
 /////////////////////////////////////////////////////////////
 TS_INLINE
-VIO::VIO()
-  :_cont(0),
-   nbytes(0),
-   ndone(0),
-   op(VIO::NONE),
-   buffer(),
-   vc_server(0),
-   mutex(0)
-{ }
+VIO::VIO() : _cont(0), nbytes(0), ndone(0), op(VIO::NONE), buffer(), vc_server(0), mutex(0)
+{
+}
 
 TS_INLINE Continuation *
 VIO::get_continuation()
@@ -59,12 +46,12 @@ VIO::get_continuation()
   return _cont;
 }
 TS_INLINE void
-VIO::set_writer(MIOBuffer * writer)
+VIO::set_writer(MIOBuffer *writer)
 {
   buffer.writer_for(writer);
 }
 TS_INLINE void
-VIO::set_reader(IOBufferReader * reader)
+VIO::set_reader(IOBufferReader *reader)
 {
   buffer.reader_for(reader);
 }
@@ -98,7 +85,7 @@ VIO::done()
 //
 /////////////////////////////////////////////////////////////
 TS_INLINE void
-VIO::set_continuation(Continuation * acont)
+VIO::set_continuation(Continuation *acont)
 {
   if (vc_server)
     vc_server->set_continuation(this, acont);

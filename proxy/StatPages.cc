@@ -28,20 +28,18 @@
 
  ****************************************************************************/
 
-#include "ink_config.h"
+#include "ts/ink_config.h"
 #include "ProxyConfig.h"
 #include "StatPages.h"
 #include "HdrUtils.h"
-#include "MatcherUtils.h"
+#include "ts/MatcherUtils.h"
 
-#define MAX_STAT_PAGES      32
-
+#define MAX_STAT_PAGES 32
 
 // Globals
 StatPagesManager statPagesManager;
 
-static struct
-{
+static struct {
   char *module;
   StatPagesFunc func;
 } stat_pages[MAX_STAT_PAGES];
@@ -65,7 +63,7 @@ StatPagesManager::register_http(const char *module, StatPagesFunc func)
 }
 
 Action *
-StatPagesManager::handle_http(Continuation * cont, HTTPHdr * header)
+StatPagesManager::handle_http(Continuation *cont, HTTPHdr *header)
 {
   URL *url = header->url_get();
 
@@ -77,14 +75,15 @@ StatPagesManager::handle_http(Continuation * cont, HTTPHdr * header)
     int i;
 
     h = url->host_get(&host_len);
-    if (host_len > MAXDNAME)
+    if (host_len > MAXDNAME) {
       host_len = MAXDNAME;
+    }
     memcpy(host, h, host_len);
     host[host_len] = '\0';
-    host_len = unescapifyStr(host);
+    host_len       = unescapifyStr(host);
 
     for (i = 0; i < n_stat_pages; i++) {
-      if (ptr_len_cmp(host, host_len, stat_pages[i].module) == 0) {
+      if (strlen(host) == strlen(stat_pages[i].module) && strncmp(host, stat_pages[i].module, host_len) == 0) {
         return stat_pages[i].func(cont, header);
       }
     }
@@ -95,56 +94,60 @@ StatPagesManager::handle_http(Continuation * cont, HTTPHdr * header)
 }
 
 bool
-StatPagesManager::is_stat_page(URL * url)
+StatPagesManager::is_stat_page(URL *url)
 {
   // This gets called from the state machine, so we should optimize here and not in caller.
-  if (m_enabled <= 0)
+  if (m_enabled <= 0) {
     return false;
+  }
 
   int length;
   const char *h = url->host_get(&length);
   char host[MAXDNAME + 1];
 
-  if (h == NULL || length < 2 || length > MAXDNAME)
+  if (h == NULL || length < 2 || length > MAXDNAME) {
     return false;
+  }
 
   memcpy(host, h, length);
   host[length] = '\0';
-  length = unescapifyStr(host);
+  length       = unescapifyStr(host);
 
-  if ((host[0] == '{') && (host[length - 1] == '}'))
+  if ((host[0] == '{') && (host[length - 1] == '}')) {
     return true;
+  }
 
   return false;
 }
 
 bool
-StatPagesManager::is_cache_inspector_page(URL * url)
+StatPagesManager::is_cache_inspector_page(URL *url)
 {
   int length;
   const char *h = url->host_get(&length);
   char host[MAXDNAME + 1];
 
-  if (h == NULL || length < 2 || length > MAXDNAME)
+  if (h == NULL || length < 2 || length > MAXDNAME) {
     return false;
+  }
 
   memcpy(host, h, length);
   host[length] = '\0';
-  length = unescapifyStr(host);
+  length       = unescapifyStr(host);
 
-  if (strncmp(host, "{cache}", length) == 0)
+  if (strncmp(host, "{cache}", length) == 0) {
     return true;
-  else
+  } else {
     return false;
-
+  }
 }
 
 void
 BaseStatPagesHandler::resp_clear()
 {
   ats_free(response);
-  response = NULL;
-  response_size = 0;
+  response        = NULL;
+  response_size   = 0;
   response_length = 0;
 }
 
@@ -193,13 +196,15 @@ BaseStatPagesHandler::resp_begin(const char *title)
   resp_clear();
   resp_add("<html>\n"
            "<head><title>%s</title></head>\n"
-           "<body text=\"#000000\" bgcolor=\"#ffffff\" link=\"#0000ee\" vlink=\"#551a8b\" alink=\"#ff0000\">\n", title);
+           "<body text=\"#000000\" bgcolor=\"#ffffff\" link=\"#0000ee\" vlink=\"#551a8b\" alink=\"#ff0000\">\n",
+           title);
 }
 
 void
 BaseStatPagesHandler::resp_end()
 {
-  resp_add("</body>\n" "</html>\n");
+  resp_add("</body>\n"
+           "</html>\n");
 }
 
 void

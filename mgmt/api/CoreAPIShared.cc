@@ -21,7 +21,10 @@
   See the License for the specific language governing permissions and
   limitations under the License.
  */
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_sock.h"
+#include "ts/ink_string.h"
+#include "ts/ink_memory.h"
 
 #include "CoreAPIShared.h"
 #include "MgmtSocket.h"
@@ -53,17 +56,21 @@ parseHTTPResponse(char *buffer, char **header, int *hdr_size, char **body, int *
     goto END;
   }
   // calculate header info
-  if (header)
+  if (header) {
     *header = buffer;
-  if (hdr_size)
+  }
+  if (hdr_size) {
     *hdr_size = buf - buffer;
+  }
 
   // calculate body info
   buf += strlen(HTTP_DIVIDER);
-  if (body)
+  if (body) {
     *body = buf;
-  if (bdy_size)
+  }
+  if (bdy_size) {
     *bdy_size = strlen(buf);
+  }
 
 END:
   return err;
@@ -117,7 +124,7 @@ readHTTPResponse(int sock, char *buffer, int bufsize, uint64_t timeout)
     }
   }
 
-error:                         /* "Houston, we have a problem!" (Apollo 13) */
+error: /* "Houston, we have a problem!" (Apollo 13) */
   if (sock >= 0) {
     close_socket(sock);
   }
@@ -168,14 +175,12 @@ sendHTTPRequest(int sock, char *req, uint64_t timeout)
   /* everything went well */
   return TS_ERR_OKAY;
 
-error:                         /* "Houston, we have a problem!" (Apollo 13) */
+error: /* "Houston, we have a problem!" (Apollo 13) */
   if (sock >= 0) {
     close_socket(sock);
   }
   return TS_ERR_NET_WRITE;
 }
-
-
 
 /* Modified from TrafficCop.cc (open_socket) */
 int
@@ -194,7 +199,7 @@ connectDirect(const char *host, int port, uint64_t /* timeout ATS_UNUSED */)
   }
 
   struct sockaddr_in name;
-  memset((void *) &name, 0, sizeof(sockaddr_in));
+  memset((void *)&name, 0, sizeof(sockaddr_in));
 
   int err;
 
@@ -210,17 +215,17 @@ connectDirect(const char *host, int port, uint64_t /* timeout ATS_UNUSED */)
   }
   // Connect to the specified port on the machine we're running on.
   name.sin_family = AF_INET;
-  name.sin_port = htons(port);
+  name.sin_port   = htons(port);
 
   struct hostent *pHostent;
   pHostent = gethostbyname(host);
   if (!pHostent) {
     goto error;
   }
-  memcpy((caddr_t)&(name.sin_addr), pHostent->h_addr, pHostent->h_length);
+  memcpy((caddr_t) & (name.sin_addr), pHostent->h_addr, pHostent->h_length);
 
   do {
-    err = connect(sock, (struct sockaddr *) &name, sizeof(name));
+    err = connect(sock, (struct sockaddr *)&name, sizeof(name));
   } while ((err < 0) && ((errno == EINTR) || (errno == EAGAIN)));
 
   if ((err < 0) && (errno != EINPROGRESS)) {
@@ -234,7 +239,7 @@ error:
     close_socket(sock);
   }
   return -1;
-}                               /* connectDirect */
+} /* connectDirect */
 
 /* COPIED direclty form TrafficCop.cc */
 static int
@@ -243,8 +248,8 @@ poll_read(int fd, int timeout)
   struct pollfd info;
   int err;
 
-  info.fd = fd;
-  info.events = POLLIN;
+  info.fd      = fd;
+  info.events  = POLLIN;
   info.revents = 0;
 
   do {
@@ -264,14 +269,13 @@ poll_write(int fd, int timeout)
   struct pollfd info;
   int err;
 
-  info.fd = fd;
-  info.events = POLLOUT;
+  info.fd      = fd;
+  info.events  = POLLOUT;
   info.revents = 0;
 
   do {
     err = poll(&info, 1, timeout);
   } while ((err < 0) && ((errno == EINTR) || (errno == EAGAIN)));
-
 
   if ((err > 0) && (info.revents & POLLOUT)) {
     return 1;

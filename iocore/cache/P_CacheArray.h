@@ -24,22 +24,21 @@
 #ifndef __CACHE_ARRAY_H__
 #define __CACHE_ARRAY_H__
 
-#define FAST_DATA_SIZE    4
+#define FAST_DATA_SIZE 4
 
+template <class T> struct CacheArray {
+  CacheArray(const T *val, int initial_size = 0);
+  ~CacheArray();
 
-template<class T> struct CacheArray
-{
-  CacheArray(const T * val, int initial_size = 0);
-   ~CacheArray();
-
-  operator  const T *() const;
-  operator  T *();
-    T & operator[] (int idx);
-    T & operator() (int idx);
+  operator const T *() const;
+  operator T *();
+  T &operator[](int idx);
+  T &operator()(int idx);
   T *detach();
   int length();
   void clear();
-  void set_length(int i)
+  void
+  set_length(int i)
   {
     pos = i - 1;
   }
@@ -53,13 +52,10 @@ template<class T> struct CacheArray
   int pos;
 };
 
-
-template<class T> TS_INLINE CacheArray<T>::CacheArray(const T * val, int initial_size)
-  :
-data(NULL),
-default_val(val),
-size(0),
-pos(-1)
+template <class T>
+TS_INLINE
+CacheArray<T>::CacheArray(const T *val, int initial_size)
+  : data(NULL), default_val(val), size(0), pos(-1)
 {
   if (initial_size > 0) {
     int i = 1;
@@ -71,32 +67,34 @@ pos(-1)
   }
 }
 
-template<class T> TS_INLINE CacheArray<T>::~CacheArray()
+template <class T> TS_INLINE CacheArray<T>::~CacheArray()
 {
   if (data) {
     if (data != fast_data) {
-      delete[]data;
+      delete[] data;
     }
   }
 }
 
-template<class T> TS_INLINE CacheArray<T>::operator  const T *()
-const
-{
-  return
-    data;
-}
-
-template <class T> TS_INLINE CacheArray <T>::operator T *()
+template <class T> TS_INLINE CacheArray<T>::operator const T *() const
 {
   return data;
 }
 
-template<class T> TS_INLINE T & CacheArray<T>::operator [](int idx) {
+template <class T> TS_INLINE CacheArray<T>::operator T *()
+{
+  return data;
+}
+
+template <class T> TS_INLINE T &CacheArray<T>::operator[](int idx)
+{
   return data[idx];
 }
 
-template<class T> TS_INLINE T & CacheArray<T>::operator ()(int idx) {
+template <class T>
+TS_INLINE T &
+CacheArray<T>::operator()(int idx)
+{
   if (idx >= size) {
     int new_size;
 
@@ -120,35 +118,43 @@ template<class T> TS_INLINE T & CacheArray<T>::operator ()(int idx) {
   return data[idx];
 }
 
-template<class T> TS_INLINE T * CacheArray<T>::detach()
+template <class T>
+TS_INLINE T *
+CacheArray<T>::detach()
 {
   T *d;
 
-  d = data;
+  d    = data;
   data = NULL;
 
   return d;
 }
 
-template<class T> TS_INLINE int CacheArray<T>::length()
+template <class T>
+TS_INLINE int
+CacheArray<T>::length()
 {
   return pos + 1;
 }
 
-template<class T> TS_INLINE void CacheArray<T>::clear()
+template <class T>
+TS_INLINE void
+CacheArray<T>::clear()
 {
   if (data) {
     if (data != fast_data) {
-      delete[]data;
+      delete[] data;
     }
     data = NULL;
   }
 
   size = 0;
-  pos = -1;
+  pos  = -1;
 }
 
-template<class T> TS_INLINE void CacheArray<T>::resize(int new_size)
+template <class T>
+TS_INLINE void
+CacheArray<T>::resize(int new_size)
 {
   if (new_size > size) {
     T *new_data;
@@ -170,13 +176,12 @@ template<class T> TS_INLINE void CacheArray<T>::resize(int new_size)
 
     if (data) {
       if (data != fast_data) {
-        delete[]data;
+        delete[] data;
       }
     }
     data = new_data;
     size = new_size;
   }
 }
-
 
 #endif /* __CACHE_ARRAY_H__ */

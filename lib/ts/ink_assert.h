@@ -28,13 +28,12 @@ Assertions
 #ifndef _INK_ASSERT_H
 #define _INK_ASSERT_H
 
-#include "ink_apidefs.h"
-#include "ink_error.h"
+#include "ts/ink_apidefs.h"
+#include "ts/ink_error.h"
 
 #ifdef __cplusplus
-extern "C"
-{
-#endif                          /* __cplusplus */
+extern "C" {
+#endif /* __cplusplus */
 
 /* don't use assert, no really DON'T use assert */
 #undef assert
@@ -44,23 +43,19 @@ extern "C"
 #undef __ASSERT_H__
 #define __ASSERT_H__
 
-  inkcoreapi void _ink_assert(const char *a, const char *f, int l) TS_NORETURN;
+inkcoreapi void _ink_assert(const char *a, const char *f, int l) TS_NORETURN;
 
 #if defined(DEBUG) || defined(__clang_analyzer__) || defined(__COVERITY__)
-#define ink_assert(EX) ( \
-            (void)(likely(EX) ? (void)0 : _ink_assert(#EX, __FILE__, __LINE__))\
-)
+#define ink_assert(EX) ((void)(likely(EX) ? (void)0 : _ink_assert(#EX, __FILE__, __LINE__)))
 #else
 #define ink_assert(EX) (void)(EX)
 #endif
 
-#define ink_release_assert(EX) ( \
-            (void)(likely(EX) ? (void)0 : _ink_assert(#EX, __FILE__, __LINE__)) \
-)
+#define ink_release_assert(EX) ((void)(likely(EX) ? (void)0 : _ink_assert(#EX, __FILE__, __LINE__)))
 
 #ifdef __cplusplus
 }
-#endif                          /* __cplusplus */
+#endif /* __cplusplus */
 
 #endif /*_INK_ASSERT_H*/
 

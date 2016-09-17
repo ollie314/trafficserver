@@ -21,13 +21,15 @@
   limitations under the License.
  */
 
-
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_string.h"
+#include "ts/ink_file.h"
+#include "ts/ink_time.h"
 #include "LocalManager.h"
 #include "ClusterCom.h"
 #include "MgmtUtils.h"
 #include "Alarms.h"
-#include "Diags.h"
+#include "ts/Diags.h"
 
 #include "P_RecCore.h"
 
@@ -53,8 +55,8 @@ const char *alarmText[] = {
   "",
   "HTTP Origin Server is Congested",
   "Congested HTTP Origin Server is now Alleviated",
-  "",                           /* congested server */
-  ""                            /* alleviated server */
+  "", /* congested server */
+  ""  /* alleviated server */
 };
 
 const int alarmTextNum = sizeof(alarmText) / sizeof(char *);
@@ -64,7 +66,7 @@ const int alarmTextNum = sizeof(alarmText) / sizeof(char *);
 static char *
 alarm_script_dir()
 {
-  char * path;
+  char *path;
 
   path = REC_readString("proxy.config.alarm.abs_path", NULL);
   if (path && *path) {
@@ -76,23 +78,21 @@ alarm_script_dir()
 
 Alarms::Alarms()
 {
-  cur_cb = 0;
-  cblist = ink_hash_table_create(InkHashTableKeyType_String);
-  local_alarms = ink_hash_table_create(InkHashTableKeyType_String);
+  cur_cb        = 0;
+  cblist        = ink_hash_table_create(InkHashTableKeyType_String);
+  local_alarms  = ink_hash_table_create(InkHashTableKeyType_String);
   remote_alarms = ink_hash_table_create(InkHashTableKeyType_String);
   ink_mutex_init(&mutex, "alarms-mutex");
   alarmOEMcount = minOEMkey;
-}                               /* End Alarms::Alarms */
-
+} /* End Alarms::Alarms */
 
 Alarms::~Alarms()
 {
   ink_hash_table_destroy(cblist);
-  ink_hash_table_destroy_and_xfree_values(local_alarms);
-  ink_hash_table_destroy_and_xfree_values(remote_alarms);
+  ink_hash_table_destroy_and_free_values(local_alarms);
+  ink_hash_table_destroy_and_free_values(remote_alarms);
   ink_mutex_destroy(&mutex);
-}                               /* End Alarms::Alarms */
-
+} /* End Alarms::Alarms */
 
 void
 Alarms::registerCallback(AlarmCallbackFunc func)
@@ -101,11 +101,10 @@ Alarms::registerCallback(AlarmCallbackFunc func)
 
   ink_mutex_acquire(&mutex);
   snprintf(cb_buf, sizeof(cb_buf), "%d", cur_cb++);
-  Debug("alarm", "[Alarms::registerCallback] Registering Alarms callback\n");
-  ink_hash_table_insert(cblist, cb_buf, (void *) func);
+  Debug("alarm", "[Alarms::registerCallback] Registering Alarms callback");
+  ink_hash_table_insert(cblist, cb_buf, (void *)func);
   ink_mutex_release(&mutex);
-}                               /* End Alarms::registerCallback */
-
+} /* End Alarms::registerCallback */
 
 bool
 Alarms::isCurrentAlarm(alarm_t a, char *ip)
@@ -128,8 +127,7 @@ Alarms::isCurrentAlarm(alarm_t a, char *ip)
   }
   ink_mutex_release(&mutex);
   return ret;
-}                               /* End Alarms::isCurrentAlarm */
-
+} /* End Alarms::isCurrentAlarm */
 
 void
 Alarms::resolveAlarm(alarm_t a, char *ip)
@@ -162,13 +160,12 @@ Alarms::resolveAlarm(alarm_t a, char *ip)
   ink_mutex_release(&mutex);
 
   return;
-}                               /* End Alarms::resolveAlarm */
-
+} /* End Alarms::resolveAlarm */
 
 void
 Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
 {
-  static time_t last_sent = 0;
+  static time_t last_sent           = 0;
   static char prev_alarm_text[2048] = "";
 
   int priority;
@@ -181,7 +178,7 @@ Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
   /* Assign correct priorities */
   switch (a) {
   case MGMT_ALARM_PROXY_CACHE_ERROR:
-    priority = 1;               // INKqa07595
+    priority = 1; // INKqa07595
     break;
   case MGMT_ALARM_PROXY_CACHE_WARNING:
     return;
@@ -198,7 +195,7 @@ Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
     priority = 1;
     break;
   case MGMT_ALARM_PROXY_PROCESS_BORN:
-    mgmt_log(stderr, "[Alarms::signalAlarm] Server Process born\n");
+    mgmt_log("[Alarms::signalAlarm] Server Process born\n");
     return;
   case MGMT_ALARM_ADD_ALARM:
     priority = 2;
@@ -213,8 +210,7 @@ Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
 
   /* Quick hack to buffer repeat alarms and only send every 15 min */
   if (desc && (priority == 1 || priority == 2) && !ip) {
-
-    if (strcmp(prev_alarm_text, desc) == 0) {   /* a repeated alarm */
+    if (strcmp(prev_alarm_text, desc) == 0) { /* a repeated alarm */
       time_t time_delta = time(0) - last_sent;
       if (time_delta < 900) {
         mgmt_log("[Alarms::signalAlarm] Skipping Alarm: '%s'\n", desc);
@@ -231,7 +227,7 @@ Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
   Debug("alarm", "[Alarms::signalAlarm] Sending Alarm: '%s'", desc);
 
   if (!desc) {
-    desc = (char *) getAlarmText(a);
+    desc = (char *)getAlarmText(a);
   }
 
   /*
@@ -261,28 +257,28 @@ Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
     if (ink_hash_table_lookup(remote_alarms, buf, &hash_value) != 0) {
       // Reset the seen flag so that we know the remote alarm is
       //   still active
-      atmp = (Alarm *) hash_value;
+      atmp       = (Alarm *)hash_value;
       atmp->seen = true;
       ink_mutex_release(&mutex);
       return;
     }
   }
 
-  atmp = (Alarm *)ats_malloc(sizeof(Alarm));
-  atmp->type = a;
-  atmp->linger = true;
-  atmp->seen = true;
-  atmp->priority = priority;
+  atmp              = (Alarm *)ats_malloc(sizeof(Alarm));
+  atmp->type        = a;
+  atmp->linger      = true;
+  atmp->seen        = true;
+  atmp->priority    = priority;
   atmp->description = NULL;
 
   if (!ip) {
-    atmp->local = true;
+    atmp->local        = true;
     atmp->inet_address = 0;
-    ink_hash_table_insert(local_alarms, (InkHashTableKey) (buf), (atmp));
+    ink_hash_table_insert(local_alarms, (InkHashTableKey)(buf), (atmp));
   } else {
-    atmp->local = false;
+    atmp->local        = false;
     atmp->inet_address = inet_addr(ip);
-    ink_hash_table_insert(remote_alarms, (InkHashTableKey) (buf), (atmp));
+    ink_hash_table_insert(remote_alarms, (InkHashTableKey)(buf), (atmp));
   }
 
   // Swap desc with time-stamped description.  Kinda hackish
@@ -293,27 +289,24 @@ Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
   time(&my_time_t);
   ink_ctime_r(&my_time_t, my_ctime_str);
   char *p = my_ctime_str;
-  while (*p != '\n' && *p != '\0')
+  while (*p != '\n' && *p != '\0') {
     p++;
-  if (*p == '\n')
+  }
+  if (*p == '\n') {
     *p = '\0';
-  char *new_desc;
-  const size_t new_desc_size = sizeof(char) * (strlen(desc) + strlen(my_ctime_str) + 4);
-  ink_assert(new_desc = (char *) alloca(new_desc_size));
-  snprintf(new_desc, new_desc_size, "[%s] %s", my_ctime_str, desc);
-  desc = new_desc;
+  }
+  const size_t sz = sizeof(char) * (strlen(desc) + strlen(my_ctime_str) + 4);
   ats_free(atmp->description);
-  const size_t atmp_desc_size = sizeof(char) * (strlen(desc) + 1);
-  atmp->description = (char *)ats_malloc(atmp_desc_size);
-  ink_strlcpy(atmp->description, desc, atmp_desc_size);
+  atmp->description = (char *)ats_malloc(sz);
+  snprintf(atmp->description, sz, "[%s] %s", my_ctime_str, desc);
+
   ink_mutex_release(&mutex);
 
-
-  for (entry = ink_hash_table_iterator_first(cblist, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(cblist, &iterator_state)) {
-    AlarmCallbackFunc func = (AlarmCallbackFunc) ink_hash_table_entry_value(remote_alarms, entry);
+  for (entry = ink_hash_table_iterator_first(cblist, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(cblist, &iterator_state)) {
+    AlarmCallbackFunc func = (AlarmCallbackFunc)ink_hash_table_entry_value(remote_alarms, entry);
     Debug("alarm", "[Alarms::signalAlarm] invoke callback for %d", a);
-    (*(func)) (a, ip, desc);
+    (*(func))(a, ip, desc);
   }
 
   /* Priority 2 alarms get signalled if they are the first unsolved occurence. */
@@ -321,8 +314,7 @@ Alarms::signalAlarm(alarm_t a, const char *desc, const char *ip)
     execAlarmBin(desc);
   }
 
-}                               /* End Alarms::signalAlarm */
-
+} /* End Alarms::signalAlarm */
 
 /*
  * resetSeenFlag(...)
@@ -336,11 +328,10 @@ Alarms::resetSeenFlag(char *ip)
   InkHashTableIteratorState iterator_state;
 
   ink_mutex_acquire(&mutex);
-  for (entry = ink_hash_table_iterator_first(remote_alarms, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(remote_alarms, &iterator_state)) {
-
-    char *key = (char *) ink_hash_table_entry_key(remote_alarms, entry);
-    Alarm *tmp = (Alarm *) ink_hash_table_entry_value(remote_alarms, entry);
+  for (entry = ink_hash_table_iterator_first(remote_alarms, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(remote_alarms, &iterator_state)) {
+    char *key  = (char *)ink_hash_table_entry_key(remote_alarms, entry);
+    Alarm *tmp = (Alarm *)ink_hash_table_entry_value(remote_alarms, entry);
 
     if (strstr(key, ip)) {
       tmp->seen = false;
@@ -348,8 +339,7 @@ Alarms::resetSeenFlag(char *ip)
   }
   ink_mutex_release(&mutex);
   return;
-}                               /* End Alarms::resetSeenFlag */
-
+} /* End Alarms::resetSeenFlag */
 
 /*
  * clearUnSeen(...)
@@ -363,15 +353,14 @@ Alarms::clearUnSeen(char *ip)
   InkHashTableIteratorState iterator_state;
 
   ink_mutex_acquire(&mutex);
-  for (entry = ink_hash_table_iterator_first(remote_alarms, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(remote_alarms, &iterator_state)) {
+  for (entry = ink_hash_table_iterator_first(remote_alarms, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(remote_alarms, &iterator_state)) {
+    char *key  = (char *)ink_hash_table_entry_key(remote_alarms, entry);
+    Alarm *tmp = (Alarm *)ink_hash_table_entry_value(remote_alarms, entry);
 
-    char *key = (char *) ink_hash_table_entry_key(remote_alarms, entry);
-    Alarm *tmp = (Alarm *) ink_hash_table_entry_value(remote_alarms, entry);
-
-    if (strstr(key, ip)) {      /* Make sure alarm is for correct ip */
-      if (!tmp->seen) {         /* Make sure we did not see it in peer's report */
-        ink_hash_table_delete(remote_alarms, key);      /* Safe in iterator? */
+    if (strstr(key, ip)) {                         /* Make sure alarm is for correct ip */
+      if (!tmp->seen) {                            /* Make sure we did not see it in peer's report */
+        ink_hash_table_delete(remote_alarms, key); /* Safe in iterator? */
         ats_free(tmp->description);
         ats_free(tmp);
       }
@@ -379,8 +368,7 @@ Alarms::clearUnSeen(char *ip)
   }
   ink_mutex_release(&mutex);
   return;
-}                               /* End Alarms::clearUnSeen */
-
+} /* End Alarms::clearUnSeen */
 
 /*
  * constructAlarmMessage(...)
@@ -388,7 +376,7 @@ Alarms::clearUnSeen(char *ip)
  * takes the current list of local alarms and builds an alarm message.
  */
 void
-Alarms::constructAlarmMessage(const AppVersionInfo& version, char *ip, char *message, int max)
+Alarms::constructAlarmMessage(const AppVersionInfo &version, char *ip, char *message, int max)
 {
   int n = 0, bsum = 0;
   char buf[4096];
@@ -402,20 +390,20 @@ Alarms::constructAlarmMessage(const AppVersionInfo& version, char *ip, char *mes
   n = ClusterCom::constructSharedPacketHeader(version, message, ip, max);
 
   ink_mutex_acquire(&mutex);
-  if (!((n + (int) strlen("type: alarm\n")) < max)) {
+  if (!((n + (int)strlen("type: alarm\n")) < max)) {
     if (max >= 1) {
       message[0] = '\0';
     }
+    ink_mutex_release(&mutex);
     return;
   }
 
   ink_strlcpy(&message[n], "type: alarm\n", max - n);
   n += strlen("type: alarm\n");
   bsum = n;
-  for (entry = ink_hash_table_iterator_first(local_alarms, &iterator_state);
-       (entry != NULL && n < max); entry = ink_hash_table_iterator_next(local_alarms, &iterator_state)) {
-
-    Alarm *tmp = (Alarm *) ink_hash_table_entry_value(remote_alarms, entry);
+  for (entry = ink_hash_table_iterator_first(local_alarms, &iterator_state); (entry != NULL && n < max);
+       entry = ink_hash_table_iterator_next(local_alarms, &iterator_state)) {
+    Alarm *tmp = (Alarm *)ink_hash_table_entry_value(remote_alarms, entry);
 
     if (tmp->description) {
       snprintf(buf, sizeof(buf), "alarm: %d %s\n", tmp->type, tmp->description);
@@ -423,26 +411,26 @@ Alarms::constructAlarmMessage(const AppVersionInfo& version, char *ip, char *mes
       snprintf(buf, sizeof(buf), "alarm: %d No details available\n", tmp->type);
     }
 
-    if (!((n + (int) strlen(buf)) < max)) {
+    if (!((n + (int)strlen(buf)) < max)) {
       break;
     }
     ink_strlcpy(&message[n], buf, max - n);
     n += strlen(buf);
   }
 
-  if (n == bsum) {              /* No alarms */
-    if (!((n + (int) strlen("alarm: none\n")) < max)) {
+  if (n == bsum) { /* No alarms */
+    if (!((n + (int)strlen("alarm: none\n")) < max)) {
       if (max >= 1) {
         message[0] = '\0';
       }
+      ink_mutex_release(&mutex);
       return;
     }
     ink_strlcpy(&message[n], "alarm: none\n", max - n);
   }
   ink_mutex_release(&mutex);
   return;
-}                               /* End Alarms::constructAlarmMessage */
-
+} /* End Alarms::constructAlarmMessage */
 
 /*
  * checkSystemNAlert(...)
@@ -453,7 +441,7 @@ void
 Alarms::checkSystemNAlert()
 {
   return;
-}                               /* End Alarms::checkSystenNAlert */
+} /* End Alarms::checkSystenNAlert */
 
 void
 Alarms::execAlarmBin(const char *desc)
@@ -476,7 +464,7 @@ Alarms::execAlarmBin(const char *desc)
   // get email info
   alarm_email_from_name = REC_readString("proxy.config.product_name", NULL);
   alarm_email_from_addr = REC_readString("proxy.config.admin.admin_user", NULL);
-  alarm_email_to_addr = REC_readString("proxy.config.alarm_email", NULL);
+  alarm_email_to_addr   = REC_readString("proxy.config.alarm_email", NULL);
 
   ink_filepath_make(cmd_line, sizeof(cmd_line), bindir, alarm_bin);
 
@@ -486,13 +474,13 @@ Alarms::execAlarmBin(const char *desc)
   if ((pid = fork1()) < 0)
 #endif
   {
-    mgmt_elog(stderr, errno, "[Alarms::execAlarmBin] Unable to fork1 process\n");
-  } else if (pid > 0) {         /* Parent */
+    mgmt_elog(errno, "[Alarms::execAlarmBin] Unable to fork1 process\n");
+  } else if (pid > 0) { /* Parent */
     int status;
     bool script_done = false;
-    time_t timeout = (time_t) REC_readInteger("proxy.config.alarm.script_runtime", NULL);
+    time_t timeout   = (time_t)REC_readInteger("proxy.config.alarm.script_runtime", NULL);
     if (!timeout) {
-      timeout = 5;              // default time = 5 secs
+      timeout = 5; // default time = 5 secs
     }
     time_t time_delta = 0;
     time_t first_time = time(0);
@@ -516,9 +504,10 @@ Alarms::execAlarmBin(const char *desc)
   } else {
     int res;
     if (alarm_email_from_name && alarm_email_from_addr && alarm_email_to_addr) {
-      res = execl(cmd_line, (const char *)alarm_bin, desc, (const char *)alarm_email_from_name, (const char *)alarm_email_from_addr, (const char *)alarm_email_to_addr, (char*)NULL);
+      res = execl(cmd_line, (const char *)alarm_bin, desc, (const char *)alarm_email_from_name, (const char *)alarm_email_from_addr,
+                  (const char *)alarm_email_to_addr, (char *)NULL);
     } else {
-      res = execl(cmd_line, (const char *)alarm_bin, desc, (char*)NULL);
+      res = execl(cmd_line, (const char *)alarm_bin, desc, (char *)NULL);
     }
     _exit(res);
   }
@@ -532,8 +521,9 @@ Alarms::execAlarmBin(const char *desc)
 const char *
 Alarms::getAlarmText(alarm_t id)
 {
-  if (id < alarmTextNum)
+  if (id < alarmTextNum) {
     return alarmText[id];
-  else
-    return alarmText[0];      // "Unknown Alarm";
+  } else {
+    return alarmText[0]; // "Unknown Alarm";
+  }
 }

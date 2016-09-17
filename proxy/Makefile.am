@@ -16,29 +16,25 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+include $(top_srcdir)/build/tidy.mk
+
 # Note that hdrs is targeted from ../Makefile.am
-SUBDIRS = congest http http2 spdy logging config
+SUBDIRS = congest http http2 logging config
 noinst_LIBRARIES =
 bin_PROGRAMS = \
   traffic_server \
   traffic_logcat \
-  traffic_logstats \
-  traffic_sac
-
-noinst_PROGRAMS = \
-  test_xml_parser
+  traffic_logstats
 
 TESTS = \
   tests/test_logstats_json \
-  tests/test_logstats_summary \
-  test_xml_parser
+  tests/test_logstats_summary
 
 AM_CPPFLAGS = \
   $(iocore_include_dirs) \
   -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
   -I$(srcdir)/http \
-  -I$(srcdir)/spdy \
+  -I$(srcdir)/http2 \
   -I$(srcdir)/logging \
   -I$(srcdir)/http/remap  \
   -I$(srcdir)/hdrs \
@@ -47,10 +43,17 @@ AM_CPPFLAGS = \
   -I$(top_srcdir)/mgmt/utils \
   -I$(top_srcdir)/proxy/api/ts \
   -I$(top_srcdir)/lib \
-  -I$(top_builddir)/lib
+  @OPENSSL_INCLUDES@
+
+# NOTE: it is safe to use AM_LDFLAGS here because we are only building executables. If we start
+# building libtool archives, change these to only apply to the executables.
+AM_LDFLAGS = \
+  $(LUAJIT_LDFLAGS) \
+  @EXTRA_CXX_LDFLAGS@ \
+  @LIBTOOL_LINK_FLAGS@ \
+  @OPENSSL_LDFLAGS@
 
 noinst_HEADERS = \
-  ConfigParse.h \
   Show.h
 
 # These are currently built separate, as part of building the lib/ tree, using
@@ -136,10 +139,8 @@ traffic_server_SOURCES = \
   CoreUtils.cc \
   CoreUtils.h \
   Crash.cc \
-  DynamicStats.h \
   EventName.cc \
   FetchSM.cc \
-  HttpTransStats.h \
   ICP.cc \
   ICP.h \
   ICPConfig.cc \
@@ -155,55 +156,50 @@ traffic_server_SOURCES = \
   InkIOCoreAPI.cc \
   Main.cc \
   Main.h \
+  Milestones.h \
+  ParentConsistentHash.cc \
+  ParentConsistentHash.h \
+  ParentRoundRobin.cc \
+  ParentRoundRobin.h \
   ParentSelection.cc \
   ParentSelection.h \
   Plugin.cc \
   Plugin.h \
   PluginVC.cc \
   PluginVC.h \
-  Prefetch.cc \
-  Prefetch.h \
   ProtocolProbeSessionAccept.cc \
   ProtocolProbeSessionAccept.h \
   ProxyClientSession.cc \
   ProxyClientSession.h \
+  ProxyClientTransaction.cc \
+  ProxyClientTransaction.h \
   ReverseProxy.cc \
   ReverseProxy.h \
   SocksProxy.cc \
   StatPages.cc \
   StatPages.h \
-  StatSystem.cc \
-  StatSystem.h \
   Transform.cc \
   Transform.h \
-  TransformInternal.h \
-  Update.cc \
-  Update.h
+  TransformInternal.h
 
 if BUILD_TESTS
-  traffic_server_SOURCES +=  InkAPITest.cc  \
-    RegressionSM.h \
-    RegressionSM.cc
+traffic_server_SOURCES +=  \
+  InkAPITest.cc  \
+  RegressionSM.h \
+  RegressionSM.cc
 endif
 
-traffic_server_LDFLAGS = @EXTRA_CXX_LDFLAGS@ @LIBTOOL_LINK_FLAGS@
-
-if BUILD_STATIC_PROXY
-traffic_server_LDFLAGS += -all-static
-endif
+traffic_server_LDFLAGS = $(AM_LDFLAGS)
 
 traffic_server_LDADD = \
   http/libhttp.a \
   http2/libhttp2.a \
-  spdy/libspdy.a \
   http/remap/libhttp_remap.a \
   congest/libCongestionControl.a \
   logging/liblogging.a \
   logging/liblogcollation.a \
   hdrs/libhdrs.a  \
-  shared/liberror.a  \
   shared/libdiagsconfig.a  \
-  shared/libxml.a \
   $(top_builddir)/mgmt/libmgmt_p.la \
   $(top_builddir)/iocore/utils/libinkutils.a \
   $(top_builddir)/iocore/cluster/libinkcluster.a \
@@ -214,132 +210,57 @@ traffic_server_LDADD = \
   $(top_builddir)/iocore/cache/libinkcache.a \
   $(top_builddir)/iocore/aio/libinkaio.a \
   $(top_builddir)/lib/ts/libtsutil.la \
+  $(top_builddir)/lib/bindings/libbindings.la \
+  $(top_builddir)/lib/luajit/src/libluajit.a \
   $(top_builddir)/iocore/net/libinknet.a \
   $(top_builddir)/iocore/eventsystem/libinkevent.a \
   $(top_builddir)/lib/records/librecords_p.a \
   $(top_builddir)/iocore/eventsystem/libinkevent.a \
   @HWLOC_LIBS@ \
   @LIBPCRE@ \
-  @OPENSSL_LIBS@ \
   @LIBTCL@ \
-  @LIBEXPAT@ \
   @LIBCAP@ \
   @LIBRESOLV@ \
   @LIBZ@ \
   @LIBLZMA@ \
   @LIBPROFILER@ \
-  @SPDYLAY_LIBS@ \
-  @LIBPTHREAD@ \
+  @OPENSSL_LIBS@ \
   -lm
 
-if BUILD_LUAJIT
-  traffic_server_LDADD += $(LUAJIT:%=$(top_builddir)/lib/luajit/src/%)
-
-  # On Darwin LuaJIT requires magic link options, otherwise it will crash in luaL_openlibs() at startup. See
-  # http://luajit.org/install.html.
-  traffic_server_LDFLAGS += $(TS_LUAJIT_LDFLAGS)
-endif
+traffic_server_LDADD += $(LUAJIT:%=$(top_builddir)/lib/luajit/src/%)
 
 traffic_logcat_SOURCES = logcat.cc
-traffic_logcat_LDFLAGS = @EXTRA_CXX_LDFLAGS@ @LIBTOOL_LINK_FLAGS@
 traffic_logcat_LDADD = \
   logging/liblogging.a \
   shared/libdiagsconfig.a \
   shared/libUglyLogStubs.a \
-  shared/libxml.a \
   $(top_builddir)/mgmt/libmgmt_p.la \
   $(top_builddir)/lib/records/librecords_p.a \
   $(top_builddir)/iocore/eventsystem/libinkevent.a \
   $(top_builddir)/lib/ts/libtsutil.la \
-  @LIBRESOLV@ @LIBPCRE@ @OPENSSL_LIBS@ @LIBTCL@ @HWLOC_LIBS@\
-  @LIBEXPAT@ @LIBPROFILER@ @LIBPTHREAD@ -lm
+  $(top_builddir)/lib/bindings/libbindings.la \
+  $(top_builddir)/lib/luajit/src/libluajit.a \
+  @LIBRESOLV@ @LIBPCRE@ @LIBTCL@ @HWLOC_LIBS@\
+  @LIBPROFILER@ -lm
 
 traffic_logstats_SOURCES = logstats.cc
-traffic_logstats_LDFLAGS = @EXTRA_CXX_LDFLAGS@ @LIBTOOL_LINK_FLAGS@
 traffic_logstats_LDADD = \
   logging/liblogging.a \
   shared/libdiagsconfig.a \
   shared/libUglyLogStubs.a \
-  shared/libxml.a \
   $(top_builddir)/mgmt/libmgmt_p.la \
   $(top_builddir)/lib/records/librecords_p.a \
   $(top_builddir)/iocore/eventsystem/libinkevent.a \
   $(top_builddir)/lib/ts/libtsutil.la \
-  @LIBRESOLV@ @LIBPCRE@ @OPENSSL_LIBS@ @LIBTCL@ @HWLOC_LIBS@ \
-  @LIBEXPAT@ @LIBPROFILER@ @LIBPTHREAD@ -lm
-
-traffic_sac_SOURCES = \
-  sac.cc \
-  ICP.cc \
-  ICPConfig.cc \
-  ICPProcessor.cc \
-  ICPStats.cc \
-  IPAllow.cc \
-  ParentSelection.cc \
-  ControlBase.cc \
-  ControlMatcher.cc \
-  CacheControl.cc \
-  StatSystem.cc \
-  ReverseProxy.cc \
-  EventName.cc \
-  StatPages.cc \
-  PluginVC.cc \
-  AbstractBuffer.cc \
-  Transform.cc \
-  Prefetch.cc \
-  ProtocolProbeSessionAccept.cc \
-  ProtocolProbeSessionAccept.h \
-  ProxyClientSession.cc \
-  ProxyClientSession.h \
-  Update.cc \
-  Plugin.cc \
-  InkAPI.cc \
-  FetchSM.cc \
-  InkIOCoreAPI.cc
-
-traffic_sac_LDFLAGS = @EXTRA_CXX_LDFLAGS@ @LIBTOOL_LINK_FLAGS@
-traffic_sac_LDADD = \
-  http/libhttp.a \
-  http2/libhttp2.a \
-  spdy/libspdy.a \
-  shared/libdiagsconfig.a \
-  http/remap/libhttp_remap.a \
-  congest/libCongestionControl.a \
-  logging/liblogging.a \
-  logging/liblogcollation.a \
-  hdrs/libhdrs.a \
-  shared/liberror.a \
-  shared/libxml.a \
-  $(top_builddir)/mgmt/libmgmt_p.la \
-  $(top_builddir)/iocore/cluster/libinkcluster.a \
-  $(top_builddir)/iocore/dns/libinkdns.a \
-  $(top_builddir)/iocore/hostdb/libinkhostdb.a \
-  $(top_builddir)/iocore/cluster/libinkcluster.a \
-  $(top_builddir)/iocore/cache/libinkcache.a \
-  $(top_builddir)/iocore/utils/libinkutils.a \
-  $(top_builddir)/iocore/aio/libinkaio.a \
-  $(top_builddir)/iocore/net/libinknet.a \
-  $(top_builddir)/iocore/eventsystem/libinkevent.a \
-  $(top_builddir)/lib/records/librecords_p.a \
-  $(top_builddir)/lib/ts/libtsutil.la \
-  @LIBRESOLV@ @LIBPCRE@ @OPENSSL_LIBS@ @LIBTCL@ @HWLOC_LIBS@ \
-  @LIBEXPAT@ @LIBZ@ @LIBLZMA@ @LIBPROFILER@ @SPDYLAY_LIBS@ @LIBPTHREAD@ -lm
-
-if BUILD_TESTS
-  traffic_sac_SOURCES += RegressionSM.cc
-endif
-
-
-test_xml_parser_SOURCES = test_xml_parser.cc
-test_xml_parser_LDADD = \
-  $(top_builddir)/mgmt/libmgmt_p.la \
-  $(top_builddir)/lib/records/librecords_p.a \
-  $(top_builddir)/iocore/eventsystem/libinkevent.a \
-  $(top_builddir)/lib/ts/libtsutil.la \
-  shared/libxml.a \
-  @LIBTCL@
+  $(top_builddir)/lib/bindings/libbindings.la \
+  $(top_builddir)/lib/luajit/src/libluajit.a \
+  @LIBRESOLV@ @LIBPCRE@ @LIBTCL@ @HWLOC_LIBS@ \
+  @LIBPROFILER@ -lm
 
 versiondir = $(pkgsysconfdir)
+
+tidy-local: $(noinst_HEADERS) $(traffic_server_SOURCES)
+	$(CXX_Clang_Tidy)
 
 install-data-local:
 	if [ `id -un` != "root" ]; then \

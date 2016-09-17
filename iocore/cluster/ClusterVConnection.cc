@@ -21,7 +21,6 @@
   limitations under the License.
  */
 
-
 /****************************************************************************
 
   ClusterVConnection.cc
@@ -32,24 +31,24 @@ ClassAllocator<ClusterVConnection> clusterVCAllocator("clusterVCAllocator");
 ClassAllocator<ByteBankDescriptor> byteBankAllocator("byteBankAllocator");
 
 ByteBankDescriptor *
-ByteBankDescriptor::ByteBankDescriptor_alloc(IOBufferBlock * iob)
+ByteBankDescriptor::ByteBankDescriptor_alloc(Ptr<IOBufferBlock> &iob)
 {
   ByteBankDescriptor *b = byteBankAllocator.alloc();
-  b->block = iob;
+  b->block              = iob;
   return b;
 }
 
 void
-ByteBankDescriptor::ByteBankDescriptor_free(ByteBankDescriptor * b)
+ByteBankDescriptor::ByteBankDescriptor_free(ByteBankDescriptor *b)
 {
   b->block = 0;
   byteBankAllocator.free(b);
 }
 
 void
-clusterVCAllocator_free(ClusterVConnection * vc)
+clusterVCAllocator_free(ClusterVConnection *vc)
 {
-  vc->mutex = 0;
+  vc->mutex   = 0;
   vc->action_ = 0;
   vc->free();
   if (vc->in_vcs) {
@@ -59,33 +58,32 @@ clusterVCAllocator_free(ClusterVConnection * vc)
   clusterVCAllocator.free(vc);
 }
 
-ClusterVConnState::ClusterVConnState():enabled(0), priority(1), vio(VIO::NONE), queue(0), ifd(-1), delay_timeout(NULL)
+ClusterVConnState::ClusterVConnState() : enabled(0), priority(1), vio(VIO::NONE), queue(0), ifd(-1), delay_timeout(NULL)
 {
 }
 
-ClusterVConnectionBase::ClusterVConnectionBase():
-thread(0), closed(0), inactivity_timeout_in(0), active_timeout_in(0), inactivity_timeout(NULL), active_timeout(NULL)
+ClusterVConnectionBase::ClusterVConnectionBase()
+  : thread(0), closed(0), inactivity_timeout_in(0), active_timeout_in(0), inactivity_timeout(NULL), active_timeout(NULL)
 {
 }
 
 #ifdef DEBUG
-int
-  ClusterVConnectionBase::enable_debug_trace = 0;
+int ClusterVConnectionBase::enable_debug_trace = 0;
 #endif
 
 VIO *
-ClusterVConnectionBase::do_io_read(Continuation * acont, int64_t anbytes, MIOBuffer * abuffer)
+ClusterVConnectionBase::do_io_read(Continuation *acont, int64_t anbytes, MIOBuffer *abuffer)
 {
   ink_assert(!closed);
   read.vio.buffer.writer_for(abuffer);
   read.vio.op = VIO::READ;
   read.vio.set_continuation(acont);
-  read.vio.nbytes = anbytes;
-  read.vio.ndone = 0;
-  read.vio.vc_server = (VConnection *) this;
-  read.enabled = 1;
+  read.vio.nbytes    = anbytes;
+  read.vio.ndone     = 0;
+  read.vio.vc_server = (VConnection *)this;
+  read.enabled       = 1;
 
-  ClusterVConnection *cvc = (ClusterVConnection *) this;
+  ClusterVConnection *cvc = (ClusterVConnection *)this;
   Debug("cluster_vc_xfer", "do_io_read [%s] chan %d", "", cvc->channel);
   return &read.vio;
 }
@@ -119,17 +117,17 @@ ClusterVConnection::get_single_data(void ** /* ptr ATS_UNUSED */, int * /* len A
 }
 
 VIO *
-ClusterVConnectionBase::do_io_write(Continuation * acont, int64_t anbytes, IOBufferReader * abuffer, bool owner)
+ClusterVConnectionBase::do_io_write(Continuation *acont, int64_t anbytes, IOBufferReader *abuffer, bool owner)
 {
   ink_assert(!closed);
   ink_assert(!owner);
   write.vio.buffer.reader_for(abuffer);
   write.vio.op = VIO::WRITE;
   write.vio.set_continuation(acont);
-  write.vio.nbytes = anbytes;
-  write.vio.ndone = 0;
-  write.vio.vc_server = (VConnection *) this;
-  write.enabled = 1;
+  write.vio.nbytes    = anbytes;
+  write.vio.ndone     = 0;
+  write.vio.vc_server = (VConnection *)this;
+  write.enabled       = 1;
 
   return &write.vio;
 }
@@ -137,7 +135,7 @@ ClusterVConnectionBase::do_io_write(Continuation * acont, int64_t anbytes, IOBuf
 void
 ClusterVConnectionBase::do_io_close(int alerrno)
 {
-  read.enabled = 0;
+  read.enabled  = 0;
   write.enabled = 0;
   read.vio.buffer.clear();
   write.vio.buffer.clear();
@@ -162,7 +160,7 @@ ClusterVConnection::reenable(VIO *vio)
 }
 
 void
-ClusterVConnectionBase::reenable(VIO * vio)
+ClusterVConnectionBase::reenable(VIO *vio)
 {
   ink_assert(!closed);
   if (vio == &read.vio) {
@@ -183,45 +181,45 @@ ClusterVConnectionBase::reenable(VIO * vio)
 }
 
 void
-ClusterVConnectionBase::reenable_re(VIO * vio)
+ClusterVConnectionBase::reenable_re(VIO *vio)
 {
   reenable(vio);
 }
 
 ClusterVConnection::ClusterVConnection(int is_new_connect_read)
-  :  ch(NULL),
-     new_connect_read(is_new_connect_read),
-     remote_free(0),
-     last_local_free(0),
-     channel(0),
-     close_disabled(0),
-     remote_closed(0),
-     remote_close_disabled(1),
-     remote_lerrno(0),
-     in_vcs(0),
-     type(0),
-     start_time(0),
-     last_activity_time(0),
-     n_set_data_msgs(0),
-     n_recv_set_data_msgs(0),
-     pending_remote_fill(0),
-     remote_ram_cache_hit(0),
-     have_all_data(0),
-     initial_data_bytes(0),
-     current_cont(0),
-     iov_map(CLUSTER_IOV_NOT_OPEN),
-     write_list_tail(0),
-     write_list_bytes(0),
-     write_bytes_in_transit(0),
-     alternate(),
-     time_pin(0),
-     disk_io_priority(0)
+  : ch(NULL),
+    new_connect_read(is_new_connect_read),
+    remote_free(0),
+    last_local_free(0),
+    channel(0),
+    close_disabled(0),
+    remote_closed(0),
+    remote_close_disabled(1),
+    remote_lerrno(0),
+    in_vcs(0),
+    type(0),
+    start_time(0),
+    last_activity_time(0),
+    n_set_data_msgs(0),
+    n_recv_set_data_msgs(0),
+    pending_remote_fill(0),
+    remote_ram_cache_hit(0),
+    have_all_data(0),
+    initial_data_bytes(0),
+    current_cont(0),
+    iov_map(CLUSTER_IOV_NOT_OPEN),
+    write_list_tail(0),
+    write_list_bytes(0),
+    write_bytes_in_transit(0),
+    alternate(),
+    time_pin(0),
+    disk_io_priority(0)
 {
 #ifdef DEBUG
-  read.vio.buffer.name = "ClusterVConnection.read";
+  read.vio.buffer.name  = "ClusterVConnection.read";
   write.vio.buffer.name = "ClusterVConnection.write";
 #endif
-  SET_HANDLER((ClusterVConnHandler) & ClusterVConnection::startEvent);
+  SET_HANDLER((ClusterVConnHandler)&ClusterVConnection::startEvent);
 }
 
 ClusterVConnection::~ClusterVConnection()
@@ -239,17 +237,17 @@ ClusterVConnection::free()
   while ((d = byte_bank_q.dequeue())) {
     ByteBankDescriptor::ByteBankDescriptor_free(d);
   }
-  read_block = 0;
-  remote_write_block = 0;
-  marshal_buf = 0;
-  write_list = 0;
-  write_list_tail = 0;
-  write_list_bytes = 0;
+  read_block             = 0;
+  remote_write_block     = 0;
+  marshal_buf            = 0;
+  write_list             = 0;
+  write_list_tail        = 0;
+  write_list_bytes       = 0;
   write_bytes_in_transit = 0;
 }
 
 VIO *
-ClusterVConnection::do_io_read(Continuation * c, int64_t nbytes, MIOBuffer * buf)
+ClusterVConnection::do_io_read(Continuation *c, int64_t nbytes, MIOBuffer *buf)
 {
   if (type == VC_CLUSTER)
     type = VC_CLUSTER_READ;
@@ -259,7 +257,7 @@ ClusterVConnection::do_io_read(Continuation * c, int64_t nbytes, MIOBuffer * buf
 }
 
 VIO *
-ClusterVConnection::do_io_write(Continuation * c, int64_t nbytes, IOBufferReader * buf, bool owner)
+ClusterVConnection::do_io_write(Continuation *c, int64_t nbytes, IOBufferReader *buf, bool owner)
 {
   if (type == VC_CLUSTER)
     type = VC_CLUSTER_WRITE;
@@ -283,27 +281,27 @@ ClusterVConnection::do_io_close(int alerrno)
 }
 
 int
-ClusterVConnection::startEvent(int event, Event * e)
+ClusterVConnection::startEvent(int event, Event *e)
 {
   //
   // Safe to call with e == NULL from the same thread.
   //
-  (void) event;
-  start(e ? e->ethread : (EThread *) NULL);
+  (void)event;
+  start(e ? e->ethread : (EThread *)NULL);
   return EVENT_DONE;
 }
 
 int
-ClusterVConnection::mainEvent(int event, Event * e)
+ClusterVConnection::mainEvent(int event, Event *e)
 {
-  (void) event;
-  (void) e;
+  (void)event;
+  (void)e;
   ink_assert(!"unexpected event");
   return EVENT_DONE;
 }
 
 int
-ClusterVConnection::start(EThread * t)
+ClusterVConnection::start(EThread *t)
 {
   //
   //  New channel connect protocol.  Establish VC locally and send the
@@ -352,7 +350,7 @@ ClusterVConnection::start(EThread * t)
     }
     if (!ch) {
       if (action_.continuation) {
-        action_.continuation->handleEvent(CLUSTER_EVENT_OPEN_FAILED, (void *) -ECLUSTER_NO_MACHINE);
+        action_.continuation->handleEvent(CLUSTER_EVENT_OPEN_FAILED, (void *)-ECLUSTER_NO_MACHINE);
         clusterVCAllocator_free(this);
         return EVENT_DONE;
       } else {
@@ -365,7 +363,7 @@ ClusterVConnection::start(EThread * t)
     channel = ch->alloc_channel(this);
     if (channel < 0) {
       if (action_.continuation) {
-        action_.continuation->handleEvent(CLUSTER_EVENT_OPEN_FAILED, (void *) -ECLUSTER_NOMORE_CHANNELS);
+        action_.continuation->handleEvent(CLUSTER_EVENT_OPEN_FAILED, (void *)-ECLUSTER_NOMORE_CHANNELS);
         clusterVCAllocator_free(this);
         return EVENT_DONE;
       } else {
@@ -385,12 +383,12 @@ ClusterVConnection::start(EThread * t)
     if ((status = ch->alloc_channel(this, channel)) < 0) {
       Debug(CL_TRACE, "VC start alloc remote failed chan=%d VC=%p", channel, this);
       clusterVCAllocator_free(this);
-      return status;            // Channel active or no more channels
+      return status; // Channel active or no more channels
     } else {
       Debug(CL_TRACE, "VC start alloc remote chan=%d VC=%p", channel, this);
       if (new_connect_read)
         this->pending_remote_fill = 1;
-      this->iov_map = CLUSTER_IOV_NONE; // disable connect timeout
+      this->iov_map               = CLUSTER_IOV_NONE; // disable connect timeout
     }
   }
   cluster_schedule(ch, this, &read);
@@ -435,7 +433,8 @@ ClusterVConnection::allow_remote_close()
   remote_close_disabled = 0;
 }
 
-bool ClusterVConnection::schedule_write()
+bool
+ClusterVConnection::schedule_write()
 {
   //
   // Schedule write if we have all data or current write data is
@@ -445,8 +444,8 @@ bool ClusterVConnection::schedule_write()
     if ((closed < 0) || remote_closed) {
       // User aborted connection, dump data.
 
-      write_list = 0;
-      write_list_tail = 0;
+      write_list       = 0;
+      write_list_tail  = 0;
       write_list_bytes = 0;
 
       return false;
@@ -476,27 +475,25 @@ ClusterVConnection::set_type(int options)
 }
 
 // Overide functions in base class VConnection.
-bool ClusterVConnection::get_data(int id, void * /* data ATS_UNUSED */)
+bool
+ClusterVConnection::get_data(int id, void * /* data ATS_UNUSED */)
 {
   switch (id) {
-  case CACHE_DATA_HTTP_INFO:
-    {
-      ink_release_assert(!"ClusterVConnection::get_data CACHE_DATA_HTTP_INFO not supported");
-    }
-  case CACHE_DATA_KEY:
-    {
-      ink_release_assert(!"ClusterVConnection::get_data CACHE_DATA_KEY not supported");
-    }
-  default:
-    {
-      ink_release_assert(!"ClusterVConnection::get_data invalid id");
-    }
+  case CACHE_DATA_HTTP_INFO: {
+    ink_release_assert(!"ClusterVConnection::get_data CACHE_DATA_HTTP_INFO not supported");
+  }
+  case CACHE_DATA_KEY: {
+    ink_release_assert(!"ClusterVConnection::get_data CACHE_DATA_KEY not supported");
+  }
+  default: {
+    ink_release_assert(!"ClusterVConnection::get_data invalid id");
+  }
   }
   return false;
 }
 
 void
-ClusterVConnection::get_http_info(CacheHTTPInfo ** info)
+ClusterVConnection::get_http_info(CacheHTTPInfo **info)
 {
   *info = &alternate;
 }
@@ -514,7 +511,7 @@ ClusterVConnection::is_pread_capable()
 }
 
 void
-ClusterVConnection::set_http_info(CacheHTTPInfo * d)
+ClusterVConnection::set_http_info(CacheHTTPInfo *d)
 {
   int flen, len;
   void *data;
@@ -529,9 +526,9 @@ ClusterVConnection::set_http_info(CacheHTTPInfo * d)
   // Cache semantics dictate that set_http_info() be established prior
   // to transferring any data on the ClusterVConnection.
   //
-  ink_release_assert(this->write.vio.op == VIO::NONE);  // not true if do_io()
+  ink_release_assert(this->write.vio.op == VIO::NONE); // not true if do_io()
   //   already done
-  ink_release_assert(this->read.vio.op == VIO::NONE);   // should always be true
+  ink_release_assert(this->read.vio.op == VIO::NONE); // should always be true
 
   int vers = SetChanDataMessage::protoToVersion(ch->machine->msg_proto_major);
   if (vers == SetChanDataMessage::SET_CHANNEL_DATA_MESSAGE_VERSION) {
@@ -546,21 +543,21 @@ ClusterVConnection::set_http_info(CacheHTTPInfo * d)
   // Create message and marshal data.
 
   CacheHTTPInfo *r = d;
-  len = r->marshal_length();
-  data = (void *) ALLOCA_DOUBLE(flen + len);
-  memcpy((char *) data, (char *) &msg, sizeof(msg));
-  m = (SetChanDataMessage *) data;
+  len              = r->marshal_length();
+  data             = (void *)ALLOCA_DOUBLE(flen + len);
+  memcpy((char *)data, (char *)&msg, sizeof(msg));
+  m            = (SetChanDataMessage *)data;
   m->data_type = CACHE_DATA_HTTP_INFO;
 
-  char *p = (char *) m + flen;
-  res = r->marshal(p, len);
+  char *p = (char *)m + flen;
+  res     = r->marshal(p, len);
   if (res < 0) {
     r->destroy();
     return;
   }
   r->destroy();
 
-  m->channel = channel;
+  m->channel         = channel;
   m->sequence_number = token.sequence_number;
 
   // note pending set_data() msgs on VC.
@@ -569,7 +566,8 @@ ClusterVConnection::set_http_info(CacheHTTPInfo * d)
   clusterProcessor.invoke_remote(ch, SET_CHANNEL_DATA_CLUSTER_FUNCTION, data, flen + len);
 }
 
-bool ClusterVConnection::set_pin_in_cache(time_t t)
+bool
+ClusterVConnection::set_pin_in_cache(time_t t)
 {
   SetChanPinMessage msg;
 
@@ -578,9 +576,9 @@ bool ClusterVConnection::set_pin_in_cache(time_t t)
   // open_write() ClusterVConnection.  It is only allowed after a
   // successful open_write() and prior to issuing the do_io(VIO::WRITE).
   //
-  ink_release_assert(this->write.vio.op == VIO::NONE);  // not true if do_io()
+  ink_release_assert(this->write.vio.op == VIO::NONE); // not true if do_io()
   //   already done
-  ink_release_assert(this->read.vio.op == VIO::NONE);   // should always be true
+  ink_release_assert(this->read.vio.op == VIO::NONE); // should always be true
   time_pin = t;
 
   int vers = SetChanPinMessage::protoToVersion(ch->machine->msg_proto_major);
@@ -591,25 +589,28 @@ bool ClusterVConnection::set_pin_in_cache(time_t t)
     //////////////////////////////////////////////////////////////
     // Create the specified down rev version of this message
     //////////////////////////////////////////////////////////////
-    ink_release_assert(!"ClusterVConnection::set_pin_in_cache() bad msg " "version");
+    ink_release_assert(!"ClusterVConnection::set_pin_in_cache() bad msg "
+                        "version");
   }
-  msg.channel = channel;
+  msg.channel         = channel;
   msg.sequence_number = token.sequence_number;
-  msg.pin_time = time_pin;
+  msg.pin_time        = time_pin;
 
   // note pending set_data() msgs on VC.
   ink_atomic_increment(&n_set_data_msgs, 1);
 
-  clusterProcessor.invoke_remote(ch, SET_CHANNEL_PIN_CLUSTER_FUNCTION, (char *) &msg, sizeof(msg));
+  clusterProcessor.invoke_remote(ch, SET_CHANNEL_PIN_CLUSTER_FUNCTION, (char *)&msg, sizeof(msg));
   return true;
 }
 
-time_t ClusterVConnection::get_pin_in_cache()
+time_t
+ClusterVConnection::get_pin_in_cache()
 {
   return time_pin;
 }
 
-bool ClusterVConnection::set_disk_io_priority(int priority)
+bool
+ClusterVConnection::set_disk_io_priority(int priority)
 {
   SetChanPriorityMessage msg;
 
@@ -618,9 +619,9 @@ bool ClusterVConnection::set_disk_io_priority(int priority)
   // open_write() ClusterVConnection.  It is only allowed after a
   // successful open_write() and prior to issuing the do_io(VIO::WRITE).
   //
-  ink_release_assert(this->write.vio.op == VIO::NONE);  // not true if do_io()
+  ink_release_assert(this->write.vio.op == VIO::NONE); // not true if do_io()
   //   already done
-  ink_release_assert(this->read.vio.op == VIO::NONE);   // should always be true
+  ink_release_assert(this->read.vio.op == VIO::NONE); // should always be true
   disk_io_priority = priority;
 
   int vers = SetChanPriorityMessage::protoToVersion(ch->machine->msg_proto_major);
@@ -631,16 +632,17 @@ bool ClusterVConnection::set_disk_io_priority(int priority)
     //////////////////////////////////////////////////////////////
     // Create the specified down rev version of this message
     //////////////////////////////////////////////////////////////
-    ink_release_assert(!"ClusterVConnection::set_disk_io_priority() bad msg " "version");
+    ink_release_assert(!"ClusterVConnection::set_disk_io_priority() bad msg "
+                        "version");
   }
-  msg.channel = channel;
+  msg.channel         = channel;
   msg.sequence_number = token.sequence_number;
-  msg.disk_priority = priority;
+  msg.disk_priority   = priority;
 
   // note pending set_data() msgs on VC.
   ink_atomic_increment(&n_set_data_msgs, 1);
 
-  clusterProcessor.invoke_remote(ch, SET_CHANNEL_PRIORITY_CLUSTER_FUNCTION, (char *) &msg, sizeof(msg));
+  clusterProcessor.invoke_remote(ch, SET_CHANNEL_PRIORITY_CLUSTER_FUNCTION, (char *)&msg, sizeof(msg));
   return true;
 }
 

@@ -21,26 +21,26 @@
   limitations under the License.
  */
 
-
-
 #ifndef LOG_FIELD_H
 #define LOG_FIELD_H
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/List.h"
 #include "LogFieldAliasMap.h"
+#include "Milestones.h"
 
 class LogAccess;
 
-struct LogSlice
-{
+struct LogSlice {
   bool m_enable;
   int m_start;
   int m_end;
 
-  LogSlice() {
+  LogSlice()
+  {
     m_enable = false;
-    m_start = 0;
-    m_end = INT_MAX;
+    m_start  = 0;
+    m_end    = INT_MAX;
   }
 
   //
@@ -59,7 +59,6 @@ struct LogSlice
   int toStrOffset(int strlen, int *offset);
 };
 
-
 /*-------------------------------------------------------------------------
   LogField
 
@@ -68,21 +67,19 @@ struct LogSlice
   pointer to its LogAccess marshalling routine.  Example:
 
       LogField ("client_host_ip", "chi", LogField::INT,
-	        &LogAccess::marshal_client_host_ip);
+                &LogAccess::marshal_client_host_ip);
   -------------------------------------------------------------------------*/
 
 class LogField
 {
 public:
-  typedef int (LogAccess::*MarshalFunc) (char *buf);
-  typedef int (*UnmarshalFunc) (char **buf, char *dest, int len);
-  typedef int (*UnmarshalFuncWithSlice) (char **buf, char *dest, int len, LogSlice *slice);
-  typedef int (*UnmarshalFuncWithMap) (char **buf, char *dest, int len, Ptr<LogFieldAliasMap> map);
-  typedef void (LogAccess::*SetFunc) (char *buf, int len);
+  typedef int (LogAccess::*MarshalFunc)(char *buf);
+  typedef int (*UnmarshalFunc)(char **buf, char *dest, int len);
+  typedef int (*UnmarshalFuncWithSlice)(char **buf, char *dest, int len, LogSlice *slice);
+  typedef int (*UnmarshalFuncWithMap)(char **buf, char *dest, int len, Ptr<LogFieldAliasMap> map);
+  typedef void (LogAccess::*SetFunc)(char *buf, int len);
 
-
-  enum Type
-  {
+  enum Type {
     sINT = 0,
     dINT,
     STRING,
@@ -90,8 +87,7 @@ public:
     N_TYPES
   };
 
-  enum Container
-  {
+  enum Container {
     NO_CONTAINER = 0,
     CQH,
     PSH,
@@ -106,57 +102,70 @@ public:
     ICFG,
     SCFG,
     RECORD,
-    N_CONTAINERS
+    MS,
+    MSDMS,
+    N_CONTAINERS,
   };
 
-  enum Aggregate
-  {
+  enum Aggregate {
     NO_AGGREGATE = 0,
     eCOUNT,
     eSUM,
     eAVG,
     eFIRST,
     eLAST,
-    N_AGGREGATES
+    N_AGGREGATES,
   };
 
-  LogField(const char *name, const char *symbol, Type type, MarshalFunc marshal, UnmarshalFunc unmarshal, SetFunc _setFunc=NULL);
+  LogField(const char *name, const char *symbol, Type type, MarshalFunc marshal, UnmarshalFunc unmarshal, SetFunc _setFunc = NULL);
 
-  LogField(const char *name, const char *symbol, Type type,
-      MarshalFunc marshal, UnmarshalFuncWithMap unmarshal, Ptr<LogFieldAliasMap> map, SetFunc _setFunc=NULL);
+  LogField(const char *name, const char *symbol, Type type, MarshalFunc marshal, UnmarshalFuncWithMap unmarshal,
+           Ptr<LogFieldAliasMap> map, SetFunc _setFunc = NULL);
 
-  LogField(const char *field, Container container, SetFunc _setFunc=NULL);
-  LogField(const LogField & rhs);
+  LogField(const char *field, Container container, SetFunc _setFunc = NULL);
+  LogField(const LogField &rhs);
   ~LogField();
 
-  unsigned marshal_len(LogAccess * lad);
-  unsigned marshal(LogAccess * lad, char *buf);
+  unsigned marshal_len(LogAccess *lad);
+  unsigned marshal(LogAccess *lad, char *buf);
   unsigned marshal_agg(char *buf);
   unsigned unmarshal(char **buf, char *dest, int len);
-  void display(FILE * fd = stdout);
-  bool operator==(LogField & rhs);
-  void updateField(LogAccess * lad, char* val, int len);
+  void display(FILE *fd = stdout);
+  bool operator==(LogField &rhs);
+  void updateField(LogAccess *lad, char *val, int len);
 
-  char *name()
+  const char *
+  name() const
   {
     return m_name;
   }
-  char *symbol()
+
+  const char *
+  symbol() const
   {
     return m_symbol;
   }
-  Type type()
+
+  Type
+  type() const
   {
     return m_type;
   }
-  Ptr<LogFieldAliasMap> map() {
+
+  Ptr<LogFieldAliasMap>
+  map()
+  {
     return m_alias_map;
-  };
-  Aggregate aggregate()
+  }
+
+  Aggregate
+  aggregate() const
   {
     return m_agg_op;
   }
-  bool is_time_field()
+
+  bool
+  is_time_field() const
   {
     return m_time_field;
   }
@@ -164,6 +173,7 @@ public:
   void set_aggregate_op(Aggregate agg_op);
   void update_aggregate(int64_t val);
 
+  static void init_milestone_container(void);
   static Container valid_container_name(char *name);
   static Aggregate valid_aggregate_name(char *name);
   static bool fieldlist_contains_aggregates(char *fieldlist);
@@ -173,31 +183,32 @@ private:
   char *m_symbol;
   Type m_type;
   Container m_container;
-  MarshalFunc m_marshal_func;   // place data into buffer
-  UnmarshalFunc m_unmarshal_func;       // create a string of the data
+  MarshalFunc m_marshal_func;     // place data into buffer
+  UnmarshalFunc m_unmarshal_func; // create a string of the data
   UnmarshalFuncWithMap m_unmarshal_func_map;
   Aggregate m_agg_op;
   int64_t m_agg_cnt;
   int64_t m_agg_val;
+  TSMilestonesType m_milestone1; ///< Used for MS and MSDMS as the first (or only) milestone.
+  TSMilestonesType m_milestone2; ///< Second milestone for MSDMS
   bool m_time_field;
   Ptr<LogFieldAliasMap> m_alias_map; // map sINT <--> string
   SetFunc m_set_func;
+  TSMilestonesType milestone_from_m_name();
+  int milestones_from_m_name(TSMilestonesType *m1, TSMilestonesType *m2);
 
 public:
   LINK(LogField, link);
   LogSlice m_slice;
 
 private:
-// luis, check where this is used and what it does
-//    void init (char *name, char *symbol, Type type);
+  // luis, check where this is used and what it does
+  //    void init (char *name, char *symbol, Type type);
 
   // -- member functions that are not allowed --
   LogField();
-  LogField & operator=(const LogField & rhs);
+  LogField &operator=(const LogField &rhs);
 };
-
-extern const char *container_names[];
-extern const char *aggregate_names[];
 
 /*-------------------------------------------------------------------------
   LogFieldList
@@ -212,31 +223,33 @@ public:
   ~LogFieldList();
 
   void clear();
-  void add(LogField * field, bool copy = true);
+  void add(LogField *field, bool copy = true);
   LogField *find_by_name(const char *name) const;
   LogField *find_by_symbol(const char *symbol) const;
-  unsigned marshal_len(LogAccess * lad);
-  unsigned marshal(LogAccess * lad, char *buf);
+  unsigned marshal_len(LogAccess *lad);
+  unsigned marshal(LogAccess *lad, char *buf);
   unsigned marshal_agg(char *buf);
 
-  LogField *first() const
+  LogField *
+  first() const
   {
     return m_field_list.head;
   }
-  LogField *next(LogField * here) const
+  LogField *
+  next(LogField *here) const
   {
     return (here->link).next;
   }
   unsigned count();
-  void display(FILE * fd = stdout);
+  void display(FILE *fd = stdout);
 
 private:
   unsigned m_marshal_len;
   Queue<LogField> m_field_list;
 
   // -- member functions that are not allowed --
-  LogFieldList(const LogFieldList & rhs);
-  LogFieldList & operator=(const LogFieldList & rhs);
+  LogFieldList(const LogFieldList &rhs);
+  LogFieldList &operator=(const LogFieldList &rhs);
 };
 
 /** Base IP address data.

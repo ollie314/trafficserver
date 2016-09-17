@@ -22,21 +22,23 @@
  */
 
 #ifndef _INK_MD5_h_
-#define	_INK_MD5_h_
+#define _INK_MD5_h_
 
-#include "ink_code.h"
-#include "ink_defs.h"
-#include "CryptoHash.h"
+#include "ts/ink_code.h"
+#include "ts/ink_defs.h"
+#include "ts/CryptoHash.h"
 
-class MD5Context : public CryptoContext {
+class MD5Context : public CryptoContext
+{
 protected:
   MD5_CTX _ctx;
+
 public:
   MD5Context();
   /// Update the hash with @a data of @a length bytes.
-  virtual bool update(void const* data, int length);
+  virtual bool update(void const *data, int length);
   /// Finalize and extract the @a hash.
-  virtual bool finalize(CryptoHash& hash);
+  virtual bool finalize(CryptoHash &hash);
 };
 
 typedef CryptoHash INK_MD5;

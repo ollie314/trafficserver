@@ -21,7 +21,7 @@
     limitations under the License.
 */
 
-#include "ink_config.h"
+#include "ts/ink_config.h"
 #include <map>
 #include <list>
 #include <string>
@@ -38,17 +38,17 @@
 #define NCURSES_NOMACROS 1
 
 #if defined HAVE_NCURSESW_CURSES_H
-#  include <ncursesw/curses.h>
+#include <ncursesw/curses.h>
 #elif defined HAVE_NCURSESW_H
-#  include <ncursesw.h>
+#include <ncursesw.h>
 #elif defined HAVE_NCURSES_CURSES_H
-#  include <ncurses/curses.h>
+#include <ncurses/curses.h>
 #elif defined HAVE_NCURSES_H
-#  include <ncurses.h>
+#include <ncurses.h>
 #elif defined HAVE_CURSES_H
-#  include <curses.h>
+#include <curses.h>
 #else
-#  error "SysV or X/Open-compatible Curses header file required"
+#error "SysV or X/Open-compatible Curses header file required"
 #endif
 
 #include "stats.h"
@@ -57,39 +57,42 @@ using namespace std;
 char curl_error[CURL_ERROR_SIZE];
 string response;
 
-namespace colorPair {
-  const short red = 1;
-  const short yellow = 2;
-  const short green = 3;
-  const short blue = 4;
-  //  const short black = 5;
-  const short grey = 6;
-  const short cyan = 7;
-  const short border = 8;
+namespace colorPair
+{
+const short red    = 1;
+const short yellow = 2;
+const short green  = 3;
+const short blue   = 4;
+//  const short black = 5;
+const short grey   = 6;
+const short cyan   = 7;
+const short border = 8;
 };
 
 //----------------------------------------------------------------------------
-static void prettyPrint(const int x, const int y, const double number, const int type) {
+static void
+prettyPrint(const int x, const int y, const double number, const int type)
+{
   char buffer[32];
-  char exp = ' ';
+  char exp         = ' ';
   double my_number = number;
   short color;
   if (number > 1000000000000LL) {
     my_number = number / 1000000000000LL;
-    exp = 'T';
-    color = colorPair::red;
+    exp       = 'T';
+    color     = colorPair::red;
   } else if (number > 1000000000) {
     my_number = number / 1000000000;
-    exp = 'G';
-    color = colorPair::red;
+    exp       = 'G';
+    color     = colorPair::red;
   } else if (number > 1000000) {
     my_number = number / 1000000;
-    exp = 'M';
-    color = colorPair::yellow;
+    exp       = 'M';
+    color     = colorPair::yellow;
   } else if (number > 1000) {
     my_number = number / 1000;
-    exp = 'K';
-    color = colorPair::cyan;
+    exp       = 'K';
+    color     = colorPair::cyan;
   } else if (my_number <= .09) {
     color = colorPair::grey;
   } else {
@@ -109,8 +112,9 @@ static void prettyPrint(const int x, const int y, const double number, const int
       color = colorPair::green;
     }
     snprintf(buffer, sizeof(buffer), "%6.1f%%%%", (double)my_number);
-  } else
+  } else {
     snprintf(buffer, sizeof(buffer), "%6.1f%c", (double)my_number, exp);
+  }
   attron(COLOR_PAIR(color));
   attron(A_BOLD);
   mvprintw(y, x, buffer);
@@ -119,7 +123,9 @@ static void prettyPrint(const int x, const int y, const double number, const int
 }
 
 //----------------------------------------------------------------------------
-static void makeTable(const int x, const int y, const list<string> &items, Stats &stats) {
+static void
+makeTable(const int x, const int y, const list<string> &items, Stats &stats)
+{
   int my_y = y;
 
   for (list<string>::const_iterator it = items.begin(); it != items.end(); ++it) {
@@ -134,16 +140,19 @@ static void makeTable(const int x, const int y, const list<string> &items, Stats
 }
 
 //----------------------------------------------------------------------------
-size_t write_data(void *ptr, size_t size, size_t nmemb, void * /* stream */)
+size_t
+write_data(void *ptr, size_t size, size_t nmemb, void * /* stream */)
 {
-  response.append((char*)ptr, size * nmemb);
-  //cout << "appending: " << size * nmemb << endl;
-  //int written = fwrite(ptr, size, nmemb, (FILE *)stream);
+  response.append((char *)ptr, size * nmemb);
+  // cout << "appending: " << size * nmemb << endl;
+  // int written = fwrite(ptr, size, nmemb, (FILE *)stream);
   return size * nmemb;
 }
 
 //----------------------------------------------------------------------------
-static void response_code_page(Stats &stats) {
+static void
+response_code_page(Stats &stats)
+{
   attron(COLOR_PAIR(colorPair::border));
   attron(A_BOLD);
   mvprintw(0, 0, "                              RESPONSE CODES                                   ");
@@ -205,27 +214,34 @@ static void response_code_page(Stats &stats) {
 }
 
 //----------------------------------------------------------------------------
-static void help(const string &host, const string &version) {
+static void
+help(const string &host, const string &version)
+{
   timeout(1000);
 
-  while(1) {
+  while (1) {
     clear();
-    time_t now = time(NULL);
+    time_t now       = time(NULL);
     struct tm *nowtm = localtime(&now);
     char timeBuf[32];
     strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S", nowtm);
 
-    //clear();
-    attron(A_BOLD); mvprintw(0, 0, "Overview:"); attroff(A_BOLD);
-    mvprintw(1, 0,
+    // clear();
+    attron(A_BOLD);
+    mvprintw(0, 0, "Overview:");
+    attroff(A_BOLD);
+    mvprintw(
+      1, 0,
       "traffic_top is a top like program for Apache Traffic Server (ATS). "
       "There is a lot of statistical information gathered by ATS. "
       "This program tries to show some of the more important stats and gives a good overview of what the proxy server is doing. "
       "Hopefully this can be used as a tool for diagnosing the proxy server if there are problems.");
 
-    attron(A_BOLD); mvprintw(7, 0, "Definitions:"); attroff(A_BOLD);
-    mvprintw(8,  0, "Fresh      => Requests that were servered by fresh entries in cache");
-    mvprintw(9,  0, "Revalidate => Requests that contacted the origin to verify if still valid");
+    attron(A_BOLD);
+    mvprintw(7, 0, "Definitions:");
+    attroff(A_BOLD);
+    mvprintw(8, 0, "Fresh      => Requests that were servered by fresh entries in cache");
+    mvprintw(9, 0, "Revalidate => Requests that contacted the origin to verify if still valid");
     mvprintw(10, 0, "Cold       => Requests that were not in cache at all");
     mvprintw(11, 0, "Changed    => Requests that required entries in cache to be updated");
     mvprintw(12, 0, "Changed    => Requests that can't be cached for some reason");
@@ -238,19 +254,22 @@ static void help(const string &host, const string &version) {
     attroff(A_BOLD);
     refresh();
     int x = getch();
-    if (x == 'b')
+    if (x == 'b') {
       break;
+    }
   }
 }
 
-static void usage()
+static void
+usage()
 {
   fprintf(stderr, "Usage: traffic_top [-s seconds] [URL|hostname|hostname:port]\n");
   exit(1);
 }
 
 //----------------------------------------------------------------------------
-void main_stats_page(Stats &stats)
+void
+main_stats_page(Stats &stats)
 {
   attron(COLOR_PAIR(colorPair::border));
   attron(A_BOLD);
@@ -298,7 +317,7 @@ void main_stats_page(Stats &stats)
   cache2.push_back("not_time");
   cache2.push_back("no_time");
   cache2.push_back("dns_ratio");
-  cache2.push_back("dns_time");
+  cache2.push_back("dns_entry");
   makeTable(21, 1, cache2, stats);
 
   list<string> response1;
@@ -364,13 +383,14 @@ void main_stats_page(Stats &stats)
 }
 
 //----------------------------------------------------------------------------
-int main(int argc, char **argv)
+int
+main(int argc, char **argv)
 {
-  int sleep_time = 5000;
-  bool absolute = false;
+  int sleep_time = 6000;
+  bool absolute  = false;
   int opt;
   while ((opt = getopt(argc, argv, "s:")) != -1) {
-    switch(opt) {
+    switch (opt) {
     case 's':
       sleep_time = atoi(optarg) * 1000;
       break;
@@ -395,7 +415,7 @@ int main(int argc, char **argv)
   initscr();
   curs_set(0);
 
-  start_color();			/* Start color functionality	*/
+  start_color(); /* Start color functionality	*/
 
   init_pair(colorPair::red, COLOR_RED, COLOR_BLACK);
   init_pair(colorPair::yellow, COLOR_YELLOW, COLOR_BLACK);
@@ -406,17 +426,19 @@ int main(int argc, char **argv)
   init_pair(colorPair::border, COLOR_WHITE, COLOR_BLUE);
   //  mvchgat(0, 0, -1, A_BLINK, 1, NULL);
 
-
-  enum Page {MAIN_PAGE, RESPONSE_PAGE};
-  Page page = MAIN_PAGE;
+  enum Page {
+    MAIN_PAGE,
+    RESPONSE_PAGE,
+  };
+  Page page       = MAIN_PAGE;
   string page_alt = "(r)esponse";
 
-  while(1) {
+  while (1) {
     attron(COLOR_PAIR(colorPair::border));
     attron(A_BOLD);
 
     string version;
-    time_t now = time(NULL);
+    time_t now       = time(NULL);
     struct tm *nowtm = localtime(&now);
     char timeBuf[32];
     strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S", nowtm);
@@ -425,7 +447,6 @@ int main(int argc, char **argv)
     mvprintw(23, 0, "%-20.20s   %30s (q)uit (h)elp (%c)bsolute  ", host.c_str(), page_alt.c_str(), absolute ? 'A' : 'a');
     attroff(COLOR_PAIR(colorPair::border));
     attroff(A_BOLD);
-
 
     if (page == MAIN_PAGE) {
       main_stats_page(stats);
@@ -445,11 +466,11 @@ int main(int argc, char **argv)
     case 'q':
       goto quit;
     case 'm':
-      page = MAIN_PAGE;
+      page     = MAIN_PAGE;
       page_alt = "(r)esponse";
       break;
     case 'r':
-      page = RESPONSE_PAGE;
+      page     = RESPONSE_PAGE;
       page_alt = "(m)ain";
       break;
     case 'a':

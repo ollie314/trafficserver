@@ -21,14 +21,15 @@
   limitations under the License.
  */
 
-#include "libts.h"
-#include "I_Layout.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_file.h"
+#include "ts/I_Layout.h"
+#include "ts/Vec.h"
 #include "FileManager.h"
 #include "Main.h"
 #include "Rollback.h"
 #include "WebMgmtUtils.h"
 #include "MgmtUtils.h"
-#include "WebGlobals.h"
 #include "ExpandingArray.h"
 #include "MgmtSocket.h"
 
@@ -36,19 +37,6 @@
 #define FILE_MODE S_IRWXU
 
 typedef fileEntry snapshot;
-
-const char *SnapshotStrings[] = { "Request Successful\n",
-  "No Snapshot Directory",
-  "Snapshot was not found\n",
-  "Creation of snapshot directory failed\n",
-  "Creation of snapshot file failed\n",
-  "Access to snapshot file Failed\n",
-  "Unable to write to snapshot file\n",
-  "Remove of Snapshot failed\n",
-  "Internal Error: Form Submission was invalid\n",
-  "No Snapshot Name Was Given\n",
-  "Invalid Snapshot name\n"
-};
 
 FileManager::FileManager()
 {
@@ -63,14 +51,15 @@ FileManager::FileManager()
   // Check to see if the directory already exists, if not create it.
   if (mkdir(snapshotDir, DIR_MODE) < 0 && errno != EEXIST) {
     // Failed to create the snapshot directory
-    mgmt_fatal(stderr, 0, "[FileManager::FileManager] Failed to create the snapshot directory %s: %s\n", (const char *)snapshotDir, strerror(errno));
+    mgmt_fatal(0, "[FileManager::FileManager] Failed to create the snapshot directory %s: %s\n", (const char *)snapshotDir,
+               strerror(errno));
   }
 
   if (!ink_file_is_directory(snapshotDir)) {
-    mgmt_fatal(stderr, 0, "[FileManager::FileManager] snapshot directory %s is not a directory\n", (const char *)snapshotDir);
+    mgmt_fatal(0, "[FileManager::FileManager] snapshot directory %s is not a directory\n", (const char *)snapshotDir);
   }
 
-  this->managedDir = snapshotDir.release();
+  this->managedDir  = snapshotDir.release();
   this->dirDescript = "snapshot";
 }
 
@@ -82,7 +71,6 @@ FileManager::FileManager()
 //
 FileManager::~FileManager()
 {
-
   callbackListable *cb;
   Rollback *rb;
   InkHashTableEntry *entry;
@@ -92,17 +80,16 @@ FileManager::~FileManager()
   ink_mutex_acquire(&accessLock);
 
   ats_free(this->managedDir);
-  this->managedDir = NULL;
+  this->managedDir  = NULL;
   this->dirDescript = NULL;
 
   for (cb = cblist.pop(); cb != NULL; cb = cblist.pop()) {
     delete cb;
   }
 
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
-
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb = (Rollback *)ink_hash_table_entry_value(bindings, entry);
 
     delete rb;
   }
@@ -125,7 +112,6 @@ FileManager::~FileManager()
 void
 FileManager::registerCallback(FileCallbackFunc func)
 {
-
   callbackListable *newcb = new callbackListable();
   ink_assert(newcb != NULL);
   newcb->func = func;
@@ -134,7 +120,8 @@ FileManager::registerCallback(FileCallbackFunc func)
   ink_mutex_release(&cbListLock);
 }
 
-// void FileManager::addFile(char* baseFileName, const configFileInfo* file_info)
+// void FileManager::addFile(char* fileName, const configFileInfo* file_info,
+//  Rollback* parentRollback)
 //
 //  for the baseFile, creates a Rollback object for it
 //
@@ -144,49 +131,55 @@ FileManager::registerCallback(FileCallbackFunc func)
 //  Pointers to the new objects are stored in the bindings hashtable
 //
 void
-FileManager::addFile(const char *baseFileName, bool root_access_needed)
+FileManager::addFile(const char *fileName, bool root_access_needed, Rollback *parentRollback, unsigned flags)
 {
-  ink_assert(baseFileName != NULL);
-
-  Rollback *rb = new Rollback(baseFileName, root_access_needed);
-  rb->configFiles = this;
-
   ink_mutex_acquire(&accessLock);
-  ink_hash_table_insert(bindings, baseFileName, rb);
+  addFileHelper(fileName, root_access_needed, parentRollback, flags);
   ink_mutex_release(&accessLock);
 }
 
-// bool FileManager::getRollbackObj(char* baseFileName, Rollback** rbPtr)
+// caller must hold the lock
+void
+FileManager::addFileHelper(const char *fileName, bool root_access_needed, Rollback *parentRollback, unsigned flags)
+{
+  ink_assert(fileName != NULL);
+
+  Rollback *rb    = new Rollback(fileName, root_access_needed, parentRollback, flags);
+  rb->configFiles = this;
+
+  ink_hash_table_insert(bindings, fileName, rb);
+}
+
+// bool FileManager::getRollbackObj(char* fileName, Rollback** rbPtr)
 //
 //  Sets rbPtr to the rollback object associated
-//    with the passed in baseFileName.
+//    with the passed in fileName.
 //
 //  If there is no binding, falseis returned
 //
 bool
-FileManager::getRollbackObj(const char *baseFileName, Rollback ** rbPtr)
+FileManager::getRollbackObj(const char *fileName, Rollback **rbPtr)
 {
   InkHashTableValue lookup = NULL;
   int found;
 
   ink_mutex_acquire(&accessLock);
-  found = ink_hash_table_lookup(bindings, baseFileName, &lookup);
+  found = ink_hash_table_lookup(bindings, fileName, &lookup);
   ink_mutex_release(&accessLock);
 
-  *rbPtr = (Rollback *) lookup;
+  *rbPtr = (Rollback *)lookup;
   return (found == 0) ? false : true;
 }
 
-// bool FileManager::fileChanged(const char* baseFileName)
+// bool FileManager::fileChanged(const char* fileName)
 //
 //  Called by the Rollback class whenever a a config has changed
 //     Initiates callbacks
 //
 //
 void
-FileManager::fileChanged(const char *baseFileName, bool incVersion)
+FileManager::fileChanged(const char *fileName, bool incVersion)
 {
-
   callbackListable *cb;
   char *filenameCopy;
 
@@ -195,8 +188,8 @@ FileManager::fileChanged(const char *baseFileName, bool incVersion)
   for (cb = cblist.head; cb != NULL; cb = cb->link.next) {
     // Dup the string for each callback to be
     //  defensive incase it modified when it is not supposed to be
-    filenameCopy = ats_strdup(baseFileName);
-    (*cb->func) (filenameCopy, incVersion);
+    filenameCopy = ats_strdup(fileName);
+    (*cb->func)(filenameCopy, incVersion);
     ats_free(filenameCopy);
   }
   ink_mutex_release(&cbListLock);
@@ -211,7 +204,6 @@ FileManager::fileChanged(const char *baseFileName, bool incVersion)
 textBuffer *
 FileManager::filesManaged()
 {
-
   textBuffer *result = new textBuffer(1024);
   const char *currentName;
   const char separator[] = "\n";
@@ -223,10 +215,9 @@ FileManager::filesManaged()
   // To get a stable snap shot, we need to get the rollback
   //   locks on all configuration files so the files
   //   do not change from under us
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
-
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb          = (Rollback *)ink_hash_table_entry_value(bindings, entry);
     currentName = rb->getBaseName();
     ink_assert(currentName);
 
@@ -248,15 +239,13 @@ FileManager::filesManaged()
 void
 FileManager::doRollbackLocks(lockAction_t action)
 {
-
   Rollback *rb;
   InkHashTableEntry *entry;
   InkHashTableIteratorState iterator_state;
 
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
-
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb = (Rollback *)ink_hash_table_entry_value(bindings, entry);
 
     switch (action) {
     case ACQUIRE_LOCK:
@@ -288,7 +277,6 @@ FileManager::doRollbackLocks(lockAction_t action)
 void
 FileManager::abortRestore(const char *abortTo)
 {
-
   Rollback *rb;
   InkHashTableEntry *entry;
   InkHashTableIteratorState iterator_state;
@@ -296,10 +284,9 @@ FileManager::abortRestore(const char *abortTo)
 
   ink_assert(abortTo != NULL);
 
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
-
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb = (Rollback *)ink_hash_table_entry_value(bindings, entry);
 
     // We are done
     if (strcmp(abortTo, rb->getBaseName()) == 0) {
@@ -308,8 +295,8 @@ FileManager::abortRestore(const char *abortTo)
 
     currentVersion = rb->getCurrentVersion();
     if (rb->revertToVersion_ml(currentVersion - 1) != OK_ROLLBACK) {
-      mgmt_fatal(stderr, 0,
-                 "[FileManager::abortRestore] Unable to abort a failed snapshot restore.  Configuration files have been left in a inconsistent state\n");
+      mgmt_fatal(0, "[FileManager::abortRestore] Unable to abort a failed snapshot restore.  Configuration files have been "
+                    "left in a inconsistent state\n");
     }
   }
 }
@@ -337,7 +324,7 @@ FileManager::restoreSnap(const char *snapName, const char *snapDir)
   ink_mutex_acquire(&accessLock);
 
   if (access(snapPath, F_OK) == -1) {
-    delete[]snapPath;
+    delete[] snapPath;
     ink_mutex_release(&accessLock);
     return SNAP_NOT_FOUND;
   }
@@ -350,10 +337,9 @@ FileManager::restoreSnap(const char *snapName, const char *snapDir)
   // For each file, load the snap shot file and Roll a new version
   //    of the active file
   //
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
-
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb       = (Rollback *)ink_hash_table_entry_value(bindings, entry);
     filePath = newPathString(snapPath, rb->getBaseName());
     if (readFile(filePath, &storage) != SNAP_OK) {
       abortRestore(rb->getBaseName());
@@ -366,7 +352,7 @@ FileManager::restoreSnap(const char *snapName, const char *snapDir)
       result = SNAP_FILE_ACCESS_FAILED;
       break;
     }
-    delete[]filePath;
+    delete[] filePath;
     filePath = NULL;
     storage.reUse();
   }
@@ -375,10 +361,10 @@ FileManager::restoreSnap(const char *snapName, const char *snapDir)
   ink_mutex_release(&accessLock);
 
   if (filePath != NULL) {
-    delete[]filePath;
+    delete[] filePath;
   }
 
-  delete[]snapPath;
+  delete[] snapPath;
   return result;
 }
 
@@ -395,21 +381,22 @@ FileManager::removeSnap(const char *snapName, const char *snapDir)
   char *snapFilePath;
   bool unlinkFailed = false;
   SnapResult result = SNAP_OK;
-  snapPath = newPathString(snapDir, snapName);
+  snapPath          = newPathString(snapDir, snapName);
 
   dir = opendir(snapPath);
 
   if (dir == NULL) {
-    mgmt_log(stderr, "[FileManager::removeSnap] Unable to open snapshot %s: %s\n", snapName, strerror(errno));
-    delete[]snapPath;
+    mgmt_log("[FileManager::removeSnap] Unable to open snapshot %s: %s\n", snapName, strerror(errno));
+    delete[] snapPath;
     return SNAP_NOT_FOUND;
   }
 
   dirEntrySpace = (struct dirent *)ats_malloc(sizeof(struct dirent) + ink_file_namemax(".") + 1);
 
   while (readdir_r(dir, dirEntrySpace, &entryPtr) == 0) {
-    if (!entryPtr)
+    if (!entryPtr) {
       break;
+    }
 
     if (strcmp(".", entryPtr->d_name) == 0 || strcmp("..", entryPtr->d_name) == 0) {
       continue;
@@ -418,11 +405,11 @@ FileManager::removeSnap(const char *snapName, const char *snapDir)
     snapFilePath = newPathString(snapPath, entryPtr->d_name);
 
     if (unlink(snapFilePath) < 0) {
-      mgmt_log(stderr, "[FileManager::removeSnap] Unlink failed for %s: %s\n", snapFilePath, strerror(errno));
+      mgmt_log("[FileManager::removeSnap] Unlink failed for %s: %s\n", snapFilePath, strerror(errno));
       unlinkFailed = true;
-      result = SNAP_REMOVE_FAILED;
+      result       = SNAP_REMOVE_FAILED;
     }
-    delete[]snapFilePath;
+    delete[] snapFilePath;
   }
 
   ats_free(dirEntrySpace);
@@ -433,28 +420,26 @@ FileManager::removeSnap(const char *snapName, const char *snapDir)
   if (unlinkFailed == false) {
     if (rmdir(snapPath) < 0) {
       // strerror() isn't reentrant/thread-safe ... Problem? /leif
-      mgmt_log(stderr,
-               "[FileManager::removeSnap] Unable to remove snapshot directory %s: %s\n", snapPath, strerror(errno));
+      mgmt_log("[FileManager::removeSnap] Unable to remove snapshot directory %s: %s\n", snapPath, strerror(errno));
       result = SNAP_REMOVE_FAILED;
     } else {
       result = SNAP_OK;
     }
   }
 
-  delete[]snapPath;
+  delete[] snapPath;
   return result;
 }
 
- //
- //  Creates a new snapshot with snapName
- //     Creates a directory named snapName in the snapshot directory
- //     Places a copy of every config file into the new directory
- //
+//
+//  Creates a new snapshot with snapName
+//     Creates a directory named snapName in the snapshot directory
+//     Places a copy of every config file into the new directory
+//
 
 SnapResult
 FileManager::takeSnap(const char *snapName, const char *snapDir)
 {
-
   Rollback *rb;
   InkHashTableEntry *entry;
   InkHashTableIteratorState iterator_state;
@@ -477,14 +462,14 @@ FileManager::takeSnap(const char *snapName, const char *snapDir)
   snapPath = newPathString(snapDir, snapName);
 
   if (mkdir(snapPath, DIR_MODE) < 0 && errno != EEXIST) {
-    mgmt_log(stderr, "[FileManager::takeSnap] Failed to create directory for snapshot %s: %s\n", snapName, strerror(errno));
-    delete[]snapPath;
+    mgmt_log("[FileManager::takeSnap] Failed to create directory for snapshot %s: %s\n", snapName, strerror(errno));
+    delete[] snapPath;
     return SNAP_DIR_CREATE_FAILED;
   }
 
   if (!ink_file_is_directory(snapPath)) {
-    mgmt_log(stderr, "[FileManager::takeSnap] snapshot directory %s is not a directory\n", snapPath);
-    delete[]snapPath;
+    mgmt_log("[FileManager::takeSnap] snapshot directory %s is not a directory\n", snapPath);
+    delete[] snapPath;
     return SNAP_DIR_CREATE_FAILED;
   }
 
@@ -496,17 +481,15 @@ FileManager::takeSnap(const char *snapName, const char *snapDir)
   doRollbackLocks(ACQUIRE_LOCK);
 
   // For each file, make a copy in the snap shot directory
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
-
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb         = (Rollback *)ink_hash_table_entry_value(bindings, entry);
     callResult = this->copyFile(rb, snapPath);
     if (callResult != SNAP_OK) {
       // Remove the failed snapshot so that we do not have a partial
       //   one hanging around
       if (removeSnap(snapName, snapDir) != SNAP_OK) {
-        mgmt_log(stderr,
-                 "[FileManager::takeSnap] Unable to remove failed snapshot %s.  This snapshot should be removed by hand\n",
+        mgmt_log("[FileManager::takeSnap] Unable to remove failed snapshot %s.  This snapshot should be removed by hand\n",
                  snapName);
       }
       break;
@@ -518,7 +501,7 @@ FileManager::takeSnap(const char *snapName, const char *snapDir)
   doRollbackLocks(RELEASE_LOCK);
 
   ink_mutex_release(&accessLock);
-  delete[]snapPath;
+  delete[] snapPath;
   return callResult;
 }
 
@@ -529,7 +512,7 @@ FileManager::takeSnap(const char *snapName, const char *snapDir)
 //    the file was successfully read and an error code otherwise
 //
 SnapResult
-FileManager::readFile(const char *filePath, textBuffer * contents)
+FileManager::readFile(const char *filePath, textBuffer *contents)
 {
   int diskFD;
   int readResult;
@@ -538,17 +521,19 @@ FileManager::readFile(const char *filePath, textBuffer * contents)
   diskFD = mgmt_open(filePath, O_RDONLY);
 
   if (diskFD < 0) {
-    mgmt_log(stderr, "[FileManager::readFile] Open of snapshot file failed %s: %s\n", filePath, strerror(errno));
+    mgmt_log("[FileManager::readFile] Open of snapshot file failed %s: %s\n", filePath, strerror(errno));
     return SNAP_FILE_ACCESS_FAILED;
   }
 
-  fcntl(diskFD, F_SETFD, 1);
+  fcntl(diskFD, F_SETFD, FD_CLOEXEC);
 
-  while ((readResult = contents->readFromFD(diskFD)) > 0);
+  while ((readResult = contents->readFromFD(diskFD)) > 0) {
+    ;
+  }
   close(diskFD);
 
   if (readResult < 0) {
-    mgmt_log(stderr, "[FileManager::readFile] Read of snapshot file failed %s: %s\n", filePath, strerror(errno));
+    mgmt_log("[FileManager::readFile] Read of snapshot file failed %s: %s\n", filePath, strerror(errno));
     return SNAP_FILE_ACCESS_FAILED;
   }
 
@@ -561,7 +546,7 @@ FileManager::readFile(const char *filePath, textBuffer * contents)
 //    directory (snapPath)
 //
 SnapResult
-FileManager::copyFile(Rollback * rb, const char *snapPath)
+FileManager::copyFile(Rollback *rb, const char *snapPath)
 {
   const char *fileName;
   char *filePath;
@@ -575,31 +560,31 @@ FileManager::copyFile(Rollback * rb, const char *snapPath)
   //
   // The Rollback lock is held by CALLEE
   if (rb->getVersion_ml(rb->getCurrentVersion(), &copyBuf) != OK_ROLLBACK) {
-    mgmt_log(stderr, "[FileManager::copyFile] Unable to retrieve current version of %s\n", fileName);
+    mgmt_log("[FileManager::copyFile] Unable to retrieve current version of %s\n", fileName);
     return SNAP_FILE_ACCESS_FAILED;
   }
   // Create the new file
   filePath = newPathString(snapPath, fileName);
-  diskFD = mgmt_open_mode(filePath, O_RDWR | O_CREAT, FILE_MODE);
+  diskFD   = mgmt_open_mode(filePath, O_RDWR | O_CREAT, FILE_MODE);
 
   if (diskFD < 0) {
-    mgmt_log(stderr, "[FileManager::copyFile] Unable to create snapshot file %s: %s\n", fileName, strerror(errno));
-    delete[]filePath;
+    mgmt_log("[FileManager::copyFile] Unable to create snapshot file %s: %s\n", fileName, strerror(errno));
+    delete[] filePath;
     delete copyBuf;
     return SNAP_FILE_CREATE_FAILED;
   }
 
-  fcntl(diskFD, F_SETFD, 1);
+  fcntl(diskFD, F_SETFD, FD_CLOEXEC);
 
   // Write the file contents to the copy
   if (write(diskFD, copyBuf->bufPtr(), copyBuf->spaceUsed()) < 0) {
-    mgmt_log(stderr, "[FileManager::copyFile] Unable to write snapshot file %s: %s\n", fileName, strerror(errno));
+    mgmt_log("[FileManager::copyFile] Unable to write snapshot file %s: %s\n", fileName, strerror(errno));
     result = SNAP_WRITE_FAILED;
   } else {
     result = SNAP_OK;
   }
 
-  delete[]filePath;
+  delete[] filePath;
   delete copyBuf;
   close(diskFD);
   return result;
@@ -613,7 +598,7 @@ FileManager::copyFile(Rollback * rb, const char *snapPath)
 //   CALLEE should be holding this->accessLock
 //
 SnapResult
-FileManager::WalkSnaps(ExpandingArray * snapList)
+FileManager::WalkSnaps(ExpandingArray *snapList)
 {
   MFresult r;
 
@@ -624,10 +609,10 @@ FileManager::WalkSnaps(ExpandingArray * snapList)
   ink_mutex_acquire(&accessLock);
 
   r = WalkFiles(snapList);
-  //lmgmt->record_data ->setString("proxy.config.snapshot_dir", managedDir);
+  // lmgmt->record_data ->setString("proxy.config.snapshot_dir", managedDir);
 
   ink_mutex_release(&accessLock);
-  return (SnapResult) r;
+  return (SnapResult)r;
 }
 
 // void FileManger::rereadConfig()
@@ -645,20 +630,49 @@ FileManager::rereadConfig()
   InkHashTableEntry *entry;
   InkHashTableIteratorState iterator_state;
 
+  Vec<Rollback *> changedFiles;
+  Vec<Rollback *> parentFileNeedChange;
   ink_mutex_acquire(&accessLock);
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb = (Rollback *)ink_hash_table_entry_value(bindings, entry);
+    if (rb->checkForUserUpdate(rb->isVersioned() ? ROLLBACK_CHECK_AND_UPDATE : ROLLBACK_CHECK_ONLY)) {
+      changedFiles.push_back(rb);
+      if (rb->isChildRollback()) {
+        parentFileNeedChange.add_exclusive(rb->getParentRollback());
+      }
+    }
+  }
 
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
-    rb->checkForUserUpdate(ROLLBACK_CHECK_AND_UPDATE);
+  Vec<Rollback *> childFileNeedDelete;
+  for (size_t i = 0; i < changedFiles.n; i++) {
+    if (changedFiles[i]->isChildRollback()) {
+      continue;
+    }
+    // for each parent file, if it is changed, then delete all its children
+    for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+         entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+      rb = (Rollback *)ink_hash_table_entry_value(bindings, entry);
+      if (rb->getParentRollback() == changedFiles[i]) {
+        childFileNeedDelete.add_exclusive(rb);
+      }
+    }
+  }
+  for (size_t i = 0; i < childFileNeedDelete.n; i++) {
+    ink_hash_table_delete(bindings, childFileNeedDelete[i]->getFileName());
+    delete childFileNeedDelete[i];
   }
   ink_mutex_release(&accessLock);
 
+  for (size_t i = 0; i < parentFileNeedChange.n; i++) {
+    if (!changedFiles.in(parentFileNeedChange[i])) {
+      fileChanged(parentFileNeedChange[i]->getFileName(), true);
+    }
+  }
   // INKqa11910
   // need to first check that enable_customizations is enabled
   bool found;
-  int enabled = (int) REC_readInteger("proxy.config.body_factory.enable_customizations",
-                                      &found);
+  int enabled = (int)REC_readInteger("proxy.config.body_factory.enable_customizations", &found);
   if (found && enabled) {
     fileChanged("proxy.config.body_factory.template_sets_dir", true);
   }
@@ -673,10 +687,9 @@ FileManager::isConfigStale()
   bool stale = false;
 
   ink_mutex_acquire(&accessLock);
-  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state);
-       entry != NULL; entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
-
-    rb = (Rollback *) ink_hash_table_entry_value(bindings, entry);
+  for (entry = ink_hash_table_iterator_first(bindings, &iterator_state); entry != NULL;
+       entry = ink_hash_table_iterator_next(bindings, &iterator_state)) {
+    rb = (Rollback *)ink_hash_table_entry_value(bindings, entry);
     if (rb->checkForUserUpdate(ROLLBACK_CHECK_ONLY)) {
       stale = true;
       break;
@@ -693,7 +706,7 @@ FileManager::isConfigStale()
 //    of current snapshots
 //
 void
-FileManager::displaySnapOption(textBuffer * output)
+FileManager::displaySnapOption(textBuffer *output)
 {
   ExpandingArray snap_list(25, true);
   SnapResult snap_result;
@@ -715,12 +728,12 @@ FileManager::displaySnapOption(textBuffer * output)
 //    tag with name action
 //
 void
-FileManager::createSelect(char *action, textBuffer * output, ExpandingArray * options)
+FileManager::createSelect(char *action, textBuffer *output, ExpandingArray *options)
 {
-  const char formOpen[] = "<form method=POST action=\"/configure/snap_action.html\">\n<select name=snap>\n";
-  const char formEnd[] = "</form>";
+  const char formOpen[]     = "<form method=POST action=\"/configure/snap_action.html\">\n<select name=snap>\n";
+  const char formEnd[]      = "</form>";
   const char submitButton[] = "<input type=submit value=\"";
-  const char hiddenInput[] = "<input type=hidden name=action value=";
+  const char hiddenInput[]  = "<input type=hidden name=action value=";
 
   int numOptions;
 
@@ -739,6 +752,25 @@ FileManager::createSelect(char *action, textBuffer * output, ExpandingArray * op
   }
 }
 
+// void configFileChild(const char *parent, const char *child)
+//
+// Add child to the bindings with parentRollback
+void
+FileManager::configFileChild(const char *parent, const char *child, unsigned flags)
+{
+  InkHashTableValue lookup;
+  Rollback *parentRollback = NULL;
+  ink_mutex_acquire(&accessLock);
+  int htfound = ink_hash_table_lookup(bindings, parent, &lookup);
+  if (htfound) {
+    parentRollback = (Rollback *)lookup;
+  }
+  if (htfound) {
+    addFileHelper(child, true, parentRollback, flags);
+  }
+  ink_mutex_release(&accessLock);
+}
+
 // bool checkValidName(const char* name)
 //
 // if the string is invalid, ie. all white spaces or contains "irregular" chars,
@@ -750,13 +782,15 @@ FileManager::checkValidName(const char *name)
   int length = strlen(name);
 
   for (int i = 0; i < length; i++) {
-    if (!isprint(name[i]))
-      return false;             // invalid - unprintable char
-    if (!isspace(name[i]))
-      return true;              // has non-white space that is printable
+    if (!isprint(name[i])) {
+      return false; // invalid - unprintable char
+    }
+    if (!isspace(name[i])) {
+      return true; // has non-white space that is printable
+    }
   }
 
-  return false;                 // all white spaces
+  return false; // all white spaces
 }
 
 //  int snapEntryCmpFunc(void* e1, void* e2)
@@ -769,8 +803,8 @@ FileManager::checkValidName(const char *name)
 int
 snapEntryCmpFunc(const void *e1, const void *e2)
 {
-  snapshot *entry1 = (snapshot *) * (void **) e1;
-  snapshot *entry2 = (snapshot *) * (void **) e2;
+  snapshot *entry1 = (snapshot *)*(void **)e1;
+  snapshot *entry2 = (snapshot *)*(void **)e2;
 
   if (entry1->c_time > entry2->c_time) {
     return 1;

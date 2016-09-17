@@ -23,7 +23,8 @@
 
 #ifndef __BITOPS_H__
 #define __BITOPS_H__
-#include "libts.h"
+
+#include <strings.h>
 
 /**
   Find First (bit) Set. Index starts at 1.
@@ -129,14 +130,14 @@ bitops_next_set(unsigned char *start, unsigned char *end, int offset)
   int t;
 
   idx = 0;
-  p = start + offset / 8;
-  t = (offset % 8) + 1;
+  p   = start + offset / 8;
+  t   = (offset % 8) + 1;
 
   while (p != end) {
     idx = bit_table[*p];
     if (idx) {
       c = *p;
-      while (idx && (idx <= (size_t) t)) {
+      while (idx && (idx <= (size_t)t)) {
         c &= ~(1 << (idx - 1));
         idx = bit_table[c];
       }
@@ -153,10 +154,10 @@ bitops_next_set(unsigned char *start, unsigned char *end, int offset)
     idx -= 1;
     idx += (p - start) * 8;
   } else {
-    idx = (size_t) - 1;
+    idx = (size_t)-1;
   }
 
-  return (int) idx;
+  return (int)idx;
 }
 
 static inline int
@@ -170,14 +171,14 @@ bitops_next_unset(unsigned char *start, unsigned char *end, int offset)
   int t;
 
   idx = 0;
-  p = start + offset / 8;
-  t = (offset % 8) + 1;
+  p   = start + offset / 8;
+  t   = (offset % 8) + 1;
 
   while (p != end) {
-    c = ~(*p);
+    c   = ~(*p);
     idx = bit_table[c];
     if (idx) {
-      while (idx && (idx <= (size_t) t)) {
+      while (idx && (idx <= (size_t)t)) {
         c &= ~(1 << (idx - 1));
         idx = bit_table[c];
       }
@@ -194,10 +195,10 @@ bitops_next_unset(unsigned char *start, unsigned char *end, int offset)
     idx -= 1;
     idx += (p - start) * 8;
   } else {
-    idx = (size_t) - 1;
+    idx = (size_t)-1;
   }
 
-  return (int) idx;
+  return (int)idx;
 }
 
 static inline int
@@ -272,4 +273,3 @@ bitops_isset(unsigned char *val, int bit)
 }
 
 #endif /* __BITOPS_H__ */
-

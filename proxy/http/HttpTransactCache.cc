@@ -21,7 +21,7 @@
   limitations under the License.
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 
 #include "HttpTransact.h"
 #include "HttpTransactHeaders.h"
@@ -29,8 +29,7 @@
 #include "time.h"
 #include "HTTP.h"
 #include "HttpCompat.h"
-#include "Error.h"
-#include "InkErrno.h"
+#include "ts/InkErrno.h"
 
 ClassAllocator<CacheLookupHttpConfig> CacheLookupHttpConfigAllocator("CacheLookupHttpConfigAllocator");
 
@@ -45,9 +44,9 @@ inline static const char *
 find_etag(const char *raw_tag_field, int raw_tag_field_len, int *length)
 {
   const char *quote;
-  int etag_length = 0;
+  int etag_length        = 0;
   const char *etag_start = raw_tag_field;
-  const char *etag_end = raw_tag_field + raw_tag_field_len;
+  const char *etag_end   = raw_tag_field + raw_tag_field_len;
 
   if ((raw_tag_field_len >= 2) && (etag_start[0] == 'W' && etag_start[1] == '/')) {
     etag_start += 2;
@@ -58,9 +57,10 @@ find_etag(const char *raw_tag_field, int raw_tag_field_len, int *length)
   if ((etag_start < etag_end) && (*etag_start == '"')) {
     ++etag_start;
     --etag_length;
-    quote = (const char *) memchr(etag_start, '"', etag_length);
-    if (quote)
+    quote = (const char *)memchr(etag_start, '"', etag_length);
+    if (quote) {
       etag_length = quote - etag_start;
+    }
   }
   *length = etag_length;
   return etag_start;
@@ -72,13 +72,12 @@ find_etag(const char *raw_tag_field, int raw_tag_field_len, int *length)
 
 */
 inline static bool
-do_strings_match_strongly(const char *raw_tag_field,
-                          int raw_tag_field_len, const char *comma_sep_tag_list, int comma_sep_tag_list_len)
+do_strings_match_strongly(const char *raw_tag_field, int raw_tag_field_len, const char *comma_sep_tag_list,
+                          int comma_sep_tag_list_len)
 {
   StrList tag_list;
   const char *etag_start;
   int n, etag_length;
-
 
   // Can never match a weak tag with a strong compare
   if ((raw_tag_field_len >= 2) && (raw_tag_field[0] == 'W' && raw_tag_field[1] == '/')) {
@@ -91,14 +90,15 @@ do_strings_match_strongly(const char *raw_tag_field,
   HttpCompat::parse_comma_list(&tag_list, comma_sep_tag_list, comma_sep_tag_list_len);
 
   // Loop over all the tags in the tag list
-  for (Str * tag = tag_list.head; tag; tag = tag->next) {
+  for (Str *tag = tag_list.head; tag; tag = tag->next) {
     // If field is "*", then we got a match
-    if ((tag->len == 1) && (tag->str[0] == '*'))
+    if ((tag->len == 1) && (tag->str[0] == '*')) {
       return true;
+    }
 
     n = 0;
 
-    if (((int) (tag->len - n) == etag_length) && (strncmp(etag_start, tag->str + n, etag_length) == 0)) {
+    if (((int)(tag->len - n) == etag_length) && (strncmp(etag_start, tag->str + n, etag_length) == 0)) {
       return true;
     }
   }
@@ -112,8 +112,8 @@ do_strings_match_strongly(const char *raw_tag_field,
 
 */
 inline static bool
-do_strings_match_weakly(const char *raw_tag_field,
-                        int raw_tag_field_len, const char *comma_sep_tag_list, int comma_sep_tag_list_len)
+do_strings_match_weakly(const char *raw_tag_field, int raw_tag_field_len, const char *comma_sep_tag_list,
+                        int comma_sep_tag_list_len)
 {
   StrList tag_list;
   const char *etag_start;
@@ -126,16 +126,18 @@ do_strings_match_weakly(const char *raw_tag_field,
   // Rip the field list into a comma-separated field list
   HttpCompat::parse_comma_list(&tag_list, comma_sep_tag_list, comma_sep_tag_list_len);
 
-  for (Str * tag = tag_list.head; tag; tag = tag->next) {
+  for (Str *tag = tag_list.head; tag; tag = tag->next) {
     // If field is "*", then we got a match
-    if ((tag->len == 1) && (tag->str[0] == '*'))
+    if ((tag->len == 1) && (tag->str[0] == '*')) {
       return true;
+    }
 
     // strip off the leading 'W/' and quotation marks from the
     // current tag, then compare for equality with above tag.
     cur_tag = find_etag(tag->str, tag->len, &cur_tag_len);
-    if ((cur_tag_len == etag_length) && (strncmp(cur_tag, etag_start, cur_tag_len) == 0))
+    if ((cur_tag_len == etag_length) && (strncmp(cur_tag, etag_start, cur_tag_len) == 0)) {
       return true;
+    }
   }
   return false;
 }
@@ -165,13 +167,13 @@ is_empty(char *s)
 
 */
 int
-HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
-                                        HTTPHdr * client_request, CacheLookupHttpConfig * http_config_params)
+HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector *cache_vector, HTTPHdr *client_request,
+                                        CacheLookupHttpConfig *http_config_params)
 {
-  time_t current_age, best_age = NUM_SECONDS_IN_ONE_YEAR;
-  time_t t_now = 0;
-  int best_index = -1;
-  float best_Q = -1.0;
+  time_t current_age, best_age = CacheHighAgeWatermark;
+  time_t t_now         = 0;
+  int best_index       = -1;
+  float best_Q         = -1.0;
   float unacceptable_Q = 0.0;
 
   int alt_count = cache_vector->count();
@@ -179,17 +181,17 @@ HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
     return -1;
   }
 
-
   Debug("http_match", "[SelectFromAlternates] # alternates = %d", alt_count);
   Debug("http_seq", "[SelectFromAlternates] %d alternates for this cached doc", alt_count);
-  if (diags->on("http_alts")) {
+  if (is_debug_tag_set("http_alts")) {
     ACQUIRE_PRINT_LOCK()
-      fprintf(stderr, "[alts] There are %d alternates for this request header.\n", alt_count);
+    fprintf(stderr, "[alts] There are %d alternates for this request header.\n", alt_count);
     RELEASE_PRINT_LOCK()
   }
   // used by ICP to bypass this function
-  if (http_config_params == &global_cache_lookup_config)
+  if (http_config_params == &global_cache_lookup_config) {
     return 0;
+  }
 
   if (!client_request->valid()) {
     return 0;
@@ -202,8 +204,8 @@ HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
 
   for (int i = 0; i < alt_count; i++) {
     float Q;
-    CacheHTTPInfo *obj = cache_vector->get(i);
-    HTTPHdr *cached_request = obj->request_get();
+    CacheHTTPInfo *obj       = cache_vector->get(i);
+    HTTPHdr *cached_request  = obj->request_get();
     HTTPHdr *cached_response = obj->response_get();
 
     if (!(obj->object_key_get() == zero_key)) {
@@ -213,19 +215,20 @@ HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
       Q = calculate_quality_of_match(http_config_params, client_request, cached_request, cached_response);
 
       if (alt_count > 1) {
-        if (t_now == 0)
+        if (t_now == 0) {
           t_now = ink_cluster_time();
-        current_age = HttpTransactHeaders::calculate_document_age(obj->request_sent_time_get(),
-                                                                  obj->response_received_time_get(),
+        }
+        current_age = HttpTransactHeaders::calculate_document_age(obj->request_sent_time_get(), obj->response_received_time_get(),
                                                                   cached_response, cached_response->get_date(), t_now);
         // Overflow?
-        if (current_age < 0)
-          current_age = NUM_SECONDS_IN_ONE_YEAR; // TODO: Should we make a different define for "max cache age" ?
+        if (current_age < 0) {
+          current_age = CacheHighAgeWatermark;
+        }
       } else {
-        current_age = (time_t) 0;
+        current_age = (time_t)0;
       }
 
-      if (diags->on("http_alts")) {
+      if (is_debug_tag_set("http_alts")) {
         fprintf(stderr, "[alts] ---- alternate #%d (Q = %g) has these request/response hdrs:\n", i + 1, Q);
         char b[4096];
         int used, tmp, offset;
@@ -234,7 +237,7 @@ HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
         offset = 0;
         do {
           used = 0;
-          tmp = offset;
+          tmp  = offset;
           done = cached_request->print(b, sizeof(b) - 1, &used, &tmp);
           offset += used;
           b[used] = '\0';
@@ -244,7 +247,7 @@ HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
         offset = 0;
         do {
           used = 0;
-          tmp = offset;
+          tmp  = offset;
           done = cached_response->print(b, sizeof(b) - 1, &used, &tmp);
           offset += used;
           b[used] = '\0';
@@ -253,16 +256,16 @@ HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
       }
 
       if ((Q > best_Q) || ((Q == best_Q) && (current_age <= best_age))) {
-        best_Q = Q;
-        best_age = current_age;
+        best_Q     = Q;
+        best_age   = current_age;
         best_index = i;
       }
     }
   }
   Debug("http_seq", "[SelectFromAlternates] Chosen alternate # %d", best_index);
-  if (diags->on("http_alts")) {
+  if (is_debug_tag_set("http_alts")) {
     ACQUIRE_PRINT_LOCK()
-      fprintf(stderr, "[alts] and the winner is alternate number %d\n", best_index + 1);
+    fprintf(stderr, "[alts] and the winner is alternate number %d\n", best_index + 1);
     RELEASE_PRINT_LOCK()
   }
 
@@ -296,14 +299,13 @@ HttpTransactCache::SelectFromAlternates(CacheHTTPInfoVector * cache_vector,
 
 */
 float
-HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig * http_config_param,
-                                              HTTPHdr * client_request,
-                                              HTTPHdr * obj_client_request,
-                                              HTTPHdr * obj_origin_server_response)
+HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig *http_config_param, HTTPHdr *client_request,
+                                              HTTPHdr *obj_client_request, HTTPHdr *obj_origin_server_response)
 {
   // For PURGE requests, any alternate is good really.
-  if (client_request->method_get_wksidx() == HTTP_WKSIDX_PURGE)
+  if (client_request->method_get_wksidx() == HTTP_WKSIDX_PURGE) {
     return (float)1.0;
+  }
 
   // Now calculate a quality based on all sorts of logic
   float q[4], Q;
@@ -350,13 +352,13 @@ HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig * http_confi
       // Ignore it
       q[1] = 1.0;
     } else {
-      accept_field = client_request->field_find(MIME_FIELD_ACCEPT_CHARSET, MIME_LEN_ACCEPT_CHARSET);
+      accept_field        = client_request->field_find(MIME_FIELD_ACCEPT_CHARSET, MIME_LEN_ACCEPT_CHARSET);
       cached_accept_field = obj_client_request->field_find(MIME_FIELD_ACCEPT_CHARSET, MIME_LEN_ACCEPT_CHARSET);
 
       // absence in both requests counts as exact match
       if (accept_field == NULL && cached_accept_field == NULL) {
         Debug("http_alternate", "Exact match for ACCEPT CHARSET (not in request nor cache)");
-        q[1] = 1.001; //slightly higher weight to this guy
+        q[1] = 1.001; // slightly higher weight to this guy
       } else {
         q[1] = calculate_quality_of_accept_charset_match(accept_field, content_field, cached_accept_field);
       }
@@ -368,14 +370,14 @@ HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig * http_confi
         // Ignore it
         q[2] = 1.0;
       } else {
-        accept_field = client_request->field_find(MIME_FIELD_ACCEPT_ENCODING, MIME_LEN_ACCEPT_ENCODING);
-        content_field = obj_origin_server_response->field_find(MIME_FIELD_CONTENT_ENCODING, MIME_LEN_CONTENT_ENCODING);
+        accept_field        = client_request->field_find(MIME_FIELD_ACCEPT_ENCODING, MIME_LEN_ACCEPT_ENCODING);
+        content_field       = obj_origin_server_response->field_find(MIME_FIELD_CONTENT_ENCODING, MIME_LEN_CONTENT_ENCODING);
         cached_accept_field = obj_client_request->field_find(MIME_FIELD_ACCEPT_ENCODING, MIME_LEN_ACCEPT_ENCODING);
 
         // absence in both requests counts as exact match
         if (accept_field == NULL && cached_accept_field == NULL) {
           Debug("http_alternate", "Exact match for ACCEPT ENCODING (not in request nor cache)");
-          q[2] = 1.001; //slightly higher weight to this guy
+          q[2] = 1.001; // slightly higher weight to this guy
         } else {
           q[2] = calculate_quality_of_accept_encoding_match(accept_field, content_field, cached_accept_field);
         }
@@ -387,14 +389,14 @@ HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig * http_confi
           // Ignore it
           q[3] = 1.0;
         } else {
-          accept_field = client_request->field_find(MIME_FIELD_ACCEPT_LANGUAGE, MIME_LEN_ACCEPT_LANGUAGE);
-          content_field = obj_origin_server_response->field_find(MIME_FIELD_CONTENT_LANGUAGE, MIME_LEN_CONTENT_LANGUAGE);
+          accept_field        = client_request->field_find(MIME_FIELD_ACCEPT_LANGUAGE, MIME_LEN_ACCEPT_LANGUAGE);
+          content_field       = obj_origin_server_response->field_find(MIME_FIELD_CONTENT_LANGUAGE, MIME_LEN_CONTENT_LANGUAGE);
           cached_accept_field = obj_client_request->field_find(MIME_FIELD_ACCEPT_LANGUAGE, MIME_LEN_ACCEPT_LANGUAGE);
 
           // absence in both requests counts as exact match
           if (accept_field == NULL && cached_accept_field == NULL) {
             Debug("http_alternate", "Exact match for ACCEPT LANGUAGE (not in request nor cache)");
-            q[3] = 1.001; //slightly higher weight to this guy
+            q[3] = 1.001; // slightly higher weight to this guy
           } else {
             q[3] = calculate_quality_of_accept_language_match(accept_field, content_field, cached_accept_field);
           }
@@ -446,8 +448,9 @@ HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig * http_confi
         if (info.m_qvalue < 0.0) {
           info.m_qvalue = 0.0;
         } else if (info.m_qvalue > 1.0) {
-          if (info.m_qvalue == FLT_MAX)
+          if (info.m_qvalue == FLT_MAX) {
             force_alt = 1;
+          }
           info.m_qvalue = 1.0;
         }
         qvalue *= info.m_qvalue;
@@ -462,19 +465,16 @@ HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig * http_confi
     }
   }
 
-  if (Q >= 0.0 && !force_alt ) {                 // make sense to check 'variability' only if Q >= 0.0
+  if (Q >= 0.0 && !force_alt) { // make sense to check 'variability' only if Q >= 0.0
     // set quality to -1, if cached copy would vary for this request //
-    Variability_t variability = CalcVariability(http_config_param, client_request,
-                                                obj_client_request, obj_origin_server_response);
+    Variability_t variability = CalcVariability(http_config_param, client_request, obj_client_request, obj_origin_server_response);
 
     if (variability != VARIABILITY_NONE) {
       Q = -1.0;
     }
 
-    Debug("http_match", "    CalcQualityOfMatch: CalcVariability says variability = %d",
-          (variability != VARIABILITY_NONE));
-    Debug("http_seq", "    CalcQualityOfMatch: CalcVariability says variability = %d",
-          (variability != VARIABILITY_NONE));
+    Debug("http_match", "    CalcQualityOfMatch: CalcVariability says variability = %d", (variability != VARIABILITY_NONE));
+    Debug("http_seq", "    CalcQualityOfMatch: CalcVariability says variability = %d", (variability != VARIABILITY_NONE));
     Debug("http_match", "    CalcQualityOfMatch: Returning final Q = %g", Q);
     Debug("http_seq", "    CalcQualityOfMatch: Returning final Q = %g", Q);
   }
@@ -504,14 +504,12 @@ HttpTransactCache::calculate_quality_of_match(CacheLookupHttpConfig * http_confi
 static inline bool
 do_content_types_match(char *type1, char *subtype1, char *type2, char *subtype2)
 {
-  return ((is_asterisk(type1) ||
-           is_empty(type1) ||
-           (strcasecmp(type1, type2) == 0)) &&
+  return ((is_asterisk(type1) || is_empty(type1) || (strcasecmp(type1, type2) == 0)) &&
           (is_asterisk(subtype1) || is_empty(subtype1) || (strcasecmp(subtype1, subtype2) == 0)));
 }
 
 float
-HttpTransactCache::calculate_quality_of_accept_match(MIMEField * accept_field, MIMEField * content_field)
+HttpTransactCache::calculate_quality_of_accept_match(MIMEField *accept_field, MIMEField *content_field)
 {
   float q = -1.0;
   const char *c_raw, *a_raw;
@@ -519,10 +517,10 @@ HttpTransactCache::calculate_quality_of_accept_match(MIMEField * accept_field, M
   char c_type[32], c_subtype[32];
   Str *a_value;
   StrList c_param_list, a_values_list;
-  bool wildcard_type_present = false;
+  bool wildcard_type_present    = false;
   bool wildcard_subtype_present = false;
-  float wildcard_type_q = 1.0;
-  float wildcard_subtype_q = 1.0;
+  float wildcard_type_q         = 1.0;
+  float wildcard_subtype_q      = 1.0;
 
   ink_assert((accept_field != NULL) && (content_field != NULL));
 
@@ -549,7 +547,7 @@ HttpTransactCache::calculate_quality_of_accept_match(MIMEField * accept_field, M
 
   for (a_value = a_values_list.head; a_value; a_value = a_value->next) {
     // Get the raw string to the current comma-sep Accept field value
-    a_raw = a_value->str;
+    a_raw     = a_value->str;
     a_raw_len = a_value->len;
 
     // Extract the field value before the semicolon
@@ -558,31 +556,30 @@ HttpTransactCache::calculate_quality_of_accept_match(MIMEField * accept_field, M
 
     // Read the next type/subtype media-range
     Str *a_param = a_param_list.head;
-    if (!a_param)
+    if (!a_param) {
       continue;
+    }
 
     // Parse the type and subtype of the Accept field
     char a_type[32], a_subtype[32];
     HttpCompat::parse_mime_type(a_param->str, a_type, a_subtype, sizeof(a_type), sizeof(a_subtype));
 
-//      printf("matching Content-type; '%s/%s' with Accept value '%s/%s'\n",
-//             c_type,c_subtype,a_type,a_subtype);
+    //      printf("matching Content-type; '%s/%s' with Accept value '%s/%s'\n",
+    //             c_type,c_subtype,a_type,a_subtype);
 
     // Is there a wildcard in the type or subtype?
     if (is_asterisk(a_type)) {
       wildcard_type_present = true;
-      wildcard_type_q = HttpCompat::find_Q_param_in_strlist(&a_param_list);
+      wildcard_type_q       = HttpCompat::find_Q_param_in_strlist(&a_param_list);
     } else if (is_asterisk(a_subtype) && (strcasecmp(a_type, c_type) == 0)) {
       wildcard_subtype_present = true;
-      wildcard_subtype_q = HttpCompat::find_Q_param_in_strlist(&a_param_list);
+      wildcard_subtype_q       = HttpCompat::find_Q_param_in_strlist(&a_param_list);
     } else {
-
       // No wildcard. Do explicit matching of accept and content values.
       if (do_content_types_match(a_type, a_subtype, c_type, c_subtype)) {
-
         float tq;
         tq = HttpCompat::find_Q_param_in_strlist(&a_param_list);
-        q = (tq > q ? tq : q);
+        q  = (tq > q ? tq : q);
       }
     }
   }
@@ -626,10 +623,9 @@ does_charset_match(char *charset1, char *charset2)
   return (is_asterisk(charset1) || is_empty(charset1) || (strcasecmp(charset1, charset2) == 0));
 }
 
-
 float
-HttpTransactCache::calculate_quality_of_accept_charset_match(MIMEField * accept_field,
-                                                             MIMEField * content_field, MIMEField * cached_accept_field)
+HttpTransactCache::calculate_quality_of_accept_charset_match(MIMEField *accept_field, MIMEField *content_field,
+                                                             MIMEField *cached_accept_field)
 {
   float q = -1.0;
   const char *c_raw, *a_raw, *ca_raw;
@@ -640,22 +636,22 @@ HttpTransactCache::calculate_quality_of_accept_charset_match(MIMEField * accept_
   char *a_charset;
   int a_charset_len;
   const char *default_charset = "utf-8";
-  bool wildcard_present = false;
-  float wildcard_q = 1.0;
+  bool wildcard_present       = false;
+  float wildcard_q            = 1.0;
 
   // prefer exact matches
   if (accept_field && cached_accept_field) {
-    a_raw = accept_field->value_get(&a_raw_len);
+    a_raw  = accept_field->value_get(&a_raw_len);
     ca_raw = cached_accept_field->value_get(&ca_raw_len);
     if (a_raw && ca_raw && a_raw_len == ca_raw_len && !strncmp(a_raw, ca_raw, a_raw_len)) {
       Debug("http_alternate", "Exact match for ACCEPT CHARSET");
-      return (float) 1.001;     //slightly higher weight to this guy
+      return (float)1.001; // slightly higher weight to this guy
     }
   }
   // return match if either ac or ct is missing
   // this check is different from accept-encoding
   if (accept_field == NULL || content_field == NULL) {
-    return (float) 1.0;
+    return (float)1.0;
   }
   // get the charset of this content-type //
   c_raw = content_field->value_get(&c_raw_len);
@@ -668,7 +664,7 @@ HttpTransactCache::calculate_quality_of_accept_charset_match(MIMEField * accept_
 
   for (a_value = a_values_list.head; a_value; a_value = a_value->next) {
     // Get the raw string to the current comma-sep Accept-Charset field value
-    a_raw = a_value->str;
+    a_raw     = a_value->str;
     a_raw_len = a_value->len;
 
     // Extract the field value before the semicolon
@@ -676,24 +672,25 @@ HttpTransactCache::calculate_quality_of_accept_charset_match(MIMEField * accept_
     HttpCompat::parse_semicolon_list(&a_param_list, a_raw, a_raw_len);
 
     if (a_param_list.head) {
-      a_charset = (char *) a_param_list.head->str;
+      a_charset     = (char *)a_param_list.head->str;
       a_charset_len = a_param_list.head->len;
-    } else
+    } else {
       continue;
+    }
 
-//      printf("matching Content-type; '%s' with Accept-Charset value '%s'\n",
-//             c_charset,a_charset);
+    //      printf("matching Content-type; '%s' with Accept-Charset value '%s'\n",
+    //             c_charset,a_charset);
 
     // dont match wildcards //
     if ((a_charset_len == 1) && (a_charset[0] == '*')) {
       wildcard_present = true;
-      wildcard_q = HttpCompat::find_Q_param_in_strlist(&a_param_list);
+      wildcard_q       = HttpCompat::find_Q_param_in_strlist(&a_param_list);
     } else {
       // if type matches, get the Q factor //
       if (does_charset_match(a_charset, c_charset)) {
         float tq;
         tq = HttpCompat::find_Q_param_in_strlist(&a_param_list);
-        q = (tq > q ? tq : q);
+        q  = (tq > q ? tq : q);
       }
     }
   }
@@ -745,16 +742,15 @@ HttpTransactCache::calculate_quality_of_accept_charset_match(MIMEField * accept_
 static inline bool
 does_encoding_match(char *enc1, const char *enc2)
 {
-  if (is_asterisk(enc1) || ((strcasecmp(enc1, enc2)) == 0))
+  if (is_asterisk(enc1) || ((strcasecmp(enc1, enc2)) == 0)) {
     return true;
+  }
 
-  //rfc2616,sec3.5: applications SHOULD consider "x-gzip" and "x-compress" to be
+  // rfc2616,sec3.5: applications SHOULD consider "x-gzip" and "x-compress" to be
   //                equivalent to "gzip" and "compress" respectively
-  if ((!strcasecmp(enc1, "gzip") && !strcasecmp(enc2, "x-gzip")) ||
-      (!strcasecmp(enc1, "x-gzip") && !strcasecmp(enc2, "gzip")) ||
+  if ((!strcasecmp(enc1, "gzip") && !strcasecmp(enc2, "x-gzip")) || (!strcasecmp(enc1, "x-gzip") && !strcasecmp(enc2, "gzip")) ||
       (!strcasecmp(enc1, "compress") && !strcasecmp(enc2, "x-compress")) ||
-      (!strcasecmp(enc1, "x-compress") && !strcasecmp(enc2, "compress"))
-    ) {
+      (!strcasecmp(enc1, "x-compress") && !strcasecmp(enc2, "compress"))) {
     return true;
   }
 
@@ -762,7 +758,7 @@ does_encoding_match(char *enc1, const char *enc2)
 }
 
 ContentEncoding
-HttpTransactCache::match_gzip(MIMEField * accept_field)
+HttpTransactCache::match_gzip(MIMEField *accept_field)
 {
   Str *a_value;
   const char *a_raw;
@@ -778,10 +774,11 @@ HttpTransactCache::match_gzip(MIMEField * accept_field)
     StrList a_param_list;
     a_raw = a_value->str;
     HttpCompat::parse_semicolon_list(&a_param_list, a_raw);
-    if (a_param_list.head)
-      a_encoding = (char *) a_param_list.head->str;
-    else
+    if (a_param_list.head) {
+      a_encoding = (char *)a_param_list.head->str;
+    } else {
       continue;
+    }
     float q;
     q = HttpCompat::find_Q_param_in_strlist(&a_param_list);
     if (q != 0 && does_encoding_match(a_encoding, "gzip")) {
@@ -793,8 +790,7 @@ HttpTransactCache::match_gzip(MIMEField * accept_field)
 
 // TODO: This used to take a length for c_raw, but that was never used, so removed it from the prototype.
 static inline bool
-match_accept_content_encoding(const char *c_raw,
-                              MIMEField * accept_field, bool * wildcard_present, float *wildcard_q, float *q)
+match_accept_content_encoding(const char *c_raw, MIMEField *accept_field, bool *wildcard_present, float *wildcard_q, float *q)
 {
   Str *a_value;
   const char *a_raw;
@@ -816,14 +812,15 @@ match_accept_content_encoding(const char *c_raw,
 
     // break Accept-Encoding piece into semi-colon separated parts //
     HttpCompat::parse_semicolon_list(&a_param_list, a_raw);
-    if (a_param_list.head)
-      a_encoding = (char *) a_param_list.head->str;
-    else
+    if (a_param_list.head) {
+      a_encoding = (char *)a_param_list.head->str;
+    } else {
       continue;
+    }
 
     if (is_asterisk(a_encoding)) {
       *wildcard_present = true;
-      *wildcard_q = HttpCompat::find_Q_param_in_strlist(&a_param_list);
+      *wildcard_q       = HttpCompat::find_Q_param_in_strlist(&a_param_list);
       return true;
     } else if (does_encoding_match(a_encoding, c_raw)) {
       // if type matches, get the Q factor //
@@ -840,40 +837,38 @@ match_accept_content_encoding(const char *c_raw,
 }
 
 float
-HttpTransactCache::calculate_quality_of_accept_encoding_match(MIMEField * accept_field,
-                                                              MIMEField * content_field,
-                                                              MIMEField * cached_accept_field)
+HttpTransactCache::calculate_quality_of_accept_encoding_match(MIMEField *accept_field, MIMEField *content_field,
+                                                              MIMEField *cached_accept_field)
 {
-
-  float q = -1.0;
+  float q                   = -1.0;
   bool is_identity_encoding = false;
   const char *c_encoding;
   int c_encoding_len;
   bool wildcard_present = false;
-  float wildcard_q = 1.0;
+  float wildcard_q      = 1.0;
   StrList c_values_list;
   Str *c_value;
   const char *a_raw, *ca_raw;
   int a_raw_len, ca_raw_len;
 
-
   // prefer exact matches
   if (accept_field && cached_accept_field) {
-    a_raw = accept_field->value_get(&a_raw_len);
+    a_raw  = accept_field->value_get(&a_raw_len);
     ca_raw = cached_accept_field->value_get(&ca_raw_len);
     if (a_raw && ca_raw && a_raw_len == ca_raw_len && !strncmp(a_raw, ca_raw, a_raw_len)) {
       Debug("http_alternate", "Exact match for ACCEPT ENCODING");
-      return (float) 1.001;     //slightly higher weight to this guy
+      return (float)1.001; // slightly higher weight to this guy
     }
   }
   // return match if both ae and ce are missing
   // this check is different from accept charset
   if (accept_field == NULL && content_field == NULL) {
-    return (float) 1.0;
+    return (float)1.0;
   }
   // if no Content-Encoding, treat as "identity" //
   if (!content_field) {
-    Debug("http_match", "[calculate_quality_accept_encoding_match]: " "response hdr does not have content-encoding.");
+    Debug("http_match", "[calculate_quality_accept_encoding_match]: "
+                        "response hdr does not have content-encoding.");
     is_identity_encoding = true;
   } else {
     // TODO: Should we check the return value (count) here?
@@ -885,7 +880,7 @@ HttpTransactCache::calculate_quality_of_accept_encoding_match(MIMEField * accept
     } else {
       // does this document have the identity encoding? //
       for (c_value = c_values_list.head; c_value; c_value = c_value->next) {
-        c_encoding = c_value->str;
+        c_encoding     = c_value->str;
         c_encoding_len = c_value->len;
         if ((c_encoding_len >= 8) && (strncasecmp(c_encoding, "identity", 8) == 0)) {
           is_identity_encoding = true;
@@ -908,12 +903,12 @@ HttpTransactCache::calculate_quality_of_accept_encoding_match(MIMEField * accept
   if (!accept_field) {
     if (is_identity_encoding) {
       if (!cached_accept_field) {
-        return ((float) 1.0);
+        return ((float)1.0);
       } else {
-        return ((float) 0.001);
+        return ((float)0.001);
       }
     } else {
-      return ((float) -1.0);
+      return ((float)-1.0);
     }
   }
 
@@ -921,16 +916,14 @@ HttpTransactCache::calculate_quality_of_accept_encoding_match(MIMEField * accept
   // request has an accept-encoding header, possibly with the identity
   // field, with a q value;
   if (!content_field) {
-    if (!match_accept_content_encoding("identity",
-                                       accept_field, &wildcard_present, &wildcard_q, &q)) {
-
+    if (!match_accept_content_encoding("identity", accept_field, &wildcard_present, &wildcard_q, &q)) {
       // CE was not returned, and AE does not have identity
       if (match_gzip(accept_field) == GZIP && match_gzip(cached_accept_field) == GZIP) {
-        return (float) 1.0;
+        return (float)1.0;
       }
       goto encoding_wildcard;
     }
-    //use q from identity match
+    // use q from identity match
 
   } else {
     // "Accept-encoding must correctly handle multiple content encoding"
@@ -945,8 +938,7 @@ HttpTransactCache::calculate_quality_of_accept_encoding_match(MIMEField * accept
     float combined_q = 1.0;
     for (c_value = c_values_list.head; c_value; c_value = c_value->next) {
       float this_q = -1.0;
-      if (!match_accept_content_encoding(c_value->str,
-                                         accept_field, &wildcard_present, &wildcard_q, &this_q)) {
+      if (!match_accept_content_encoding(c_value->str, accept_field, &wildcard_present, &wildcard_q, &this_q)) {
         goto encoding_wildcard;
       }
       combined_q *= this_q;
@@ -967,18 +959,18 @@ encoding_wildcard:
   if ((q == -1.0) && is_identity_encoding) {
     if (match_gzip(accept_field) == GZIP) {
       if (match_gzip(cached_accept_field) == GZIP) {
-        return (float) 1.0;
+        return (float)1.0;
       } else {
         // always try to fetch GZIP content if we have not tried sending AE before
-        return (float) -1.0;
+        return (float)-1.0;
       }
     } else if (cached_accept_field && match_gzip(cached_accept_field) != GZIP) {
-      return (float) 0.001;
+      return (float)0.001;
     } else {
-      return (float) -1.0;
+      return (float)-1.0;
     }
   }
-//      q = (float)-1.0;
+  //      q = (float)-1.0;
   return (q);
 }
 
@@ -1013,10 +1005,8 @@ does_language_range_match(const char *range1, const char *range2)
 }
 
 static inline bool
-match_accept_content_language(const char *c_raw,
-                              MIMEField * accept_field,
-                              bool * wildcard_present,
-                              float *wildcard_q, float *q, int *a_range_length)
+match_accept_content_language(const char *c_raw, MIMEField *accept_field, bool *wildcard_present, float *wildcard_q, float *q,
+                              int *a_range_length)
 {
   const char *a_raw;
   int a_raw_len;
@@ -1030,7 +1020,7 @@ match_accept_content_language(const char *c_raw,
   accept_field->value_get_comma_list(&a_values_list);
 
   for (a_value = a_values_list.head; a_value; a_value = a_value->next) {
-    a_raw = a_value->str;
+    a_raw     = a_value->str;
     a_raw_len = a_value->len;
 
     char *a_range;
@@ -1047,7 +1037,7 @@ match_accept_content_language(const char *c_raw,
     // was specified, this document matches all accept headers.        //
     /////////////////////////////////////////////////////////////////////
     if (a_param_list.head) {
-      a_range = (char *) a_param_list.head->str;
+      a_range         = (char *)a_param_list.head->str;
       *a_range_length = a_param_list.head->len;
     } else {
       continue;
@@ -1055,15 +1045,15 @@ match_accept_content_language(const char *c_raw,
 
     if (is_asterisk(a_range)) {
       *wildcard_present = true;
-      *wildcard_q = HttpCompat::find_Q_param_in_strlist(&a_param_list);
+      *wildcard_q       = HttpCompat::find_Q_param_in_strlist(&a_param_list);
       return true;
     } else if (does_language_range_match(a_range, c_raw)) {
       *q = tq;
-// This is disabled, so removed max_a_range_length from prototype
-//          if (*a_range_length > *max_a_range_length) {
-//              *q = tq;
-//              *max_a_range_length = *a_range_length;
-//          }
+      // This is disabled, so removed max_a_range_length from prototype
+      //          if (*a_range_length > *max_a_range_length) {
+      //              *q = tq;
+      //              *max_a_range_length = *a_range_length;
+      //          }
       return true;
     } else {
     }
@@ -1072,23 +1062,21 @@ match_accept_content_language(const char *c_raw,
   return false;
 }
 
-
 // FIX: This code is icky, and i suspect wrong in places, particularly
 //      beacuse parts of match_accept_content_language are commented out.
 //      It looks like lots of hacks were done.  The code should probably
 //      be updated to use the code in HttpCompat::match_accept_language.
 
 float
-HttpTransactCache::calculate_quality_of_accept_language_match(MIMEField * accept_field,
-                                                              MIMEField * content_field,
-                                                              MIMEField * cached_accept_field)
+HttpTransactCache::calculate_quality_of_accept_language_match(MIMEField *accept_field, MIMEField *content_field,
+                                                              MIMEField *cached_accept_field)
 {
   float q = -1.0;
   int a_range_length;
   bool wildcard_present = false;
-  float wildcard_q = 1.0;
-  float min_q = 1.0;
-  bool match_found = false;
+  float wildcard_q      = 1.0;
+  float min_q           = 1.0;
+  bool match_found      = false;
   StrList c_values_list;
   Str *c_value;
   const char *c_raw, *a_raw, *ca_raw;
@@ -1096,11 +1084,11 @@ HttpTransactCache::calculate_quality_of_accept_language_match(MIMEField * accept
 
   // Bug 2393700 prefer exact matches
   if (accept_field && cached_accept_field) {
-    a_raw = accept_field->value_get(&a_raw_len);
+    a_raw  = accept_field->value_get(&a_raw_len);
     ca_raw = cached_accept_field->value_get(&ca_raw_len);
     if (a_raw && ca_raw && a_raw_len == ca_raw_len && !strncmp(a_raw, ca_raw, a_raw_len)) {
       Debug("http_alternate", "Exact match for ACCEPT LANGUAGE");
-      return (float) 1.001;     //slightly higher weight to this guy
+      return (float)1.001; // slightly higher weight to this guy
     }
   }
 
@@ -1112,12 +1100,11 @@ HttpTransactCache::calculate_quality_of_accept_language_match(MIMEField * accept
   // field, with a q value;
 
   if (!content_field) {
-    if (match_accept_content_language("identity",
-                                      accept_field,
-                                      &wildcard_present, &wildcard_q, &q, &a_range_length)) {
+    if (match_accept_content_language("identity", accept_field, &wildcard_present, &wildcard_q, &q, &a_range_length)) {
       goto language_wildcard;
     }
-    Debug("http_match", "[calculate_quality_accept_language_match]: " "response hdr does not have content-language.");
+    Debug("http_match", "[calculate_quality_accept_language_match]: "
+                        "response hdr does not have content-language.");
     return (1.0);
   }
 
@@ -1128,10 +1115,8 @@ HttpTransactCache::calculate_quality_of_accept_language_match(MIMEField * accept
     c_raw = c_value->str;
 
     // get Content-Language value //
-    if (match_accept_content_language(c_raw,
-                                      accept_field,
-                                      &wildcard_present, &wildcard_q, &q, &a_range_length)) {
-      min_q = (min_q < q ? min_q : q);
+    if (match_accept_content_language(c_raw, accept_field, &wildcard_present, &wildcard_q, &q, &a_range_length)) {
+      min_q       = (min_q < q ? min_q : q);
       match_found = true;
     }
   }
@@ -1159,8 +1144,8 @@ language_wildcard:
 
 */
 Variability_t
-HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, HTTPHdr * client_request,
-                                   HTTPHdr * obj_client_request, HTTPHdr * obj_origin_server_response)
+HttpTransactCache::CalcVariability(CacheLookupHttpConfig *http_config_params, HTTPHdr *client_request, HTTPHdr *obj_client_request,
+                                   HTTPHdr *obj_origin_server_response)
 {
   ink_assert(http_config_params != NULL);
   ink_assert(client_request != NULL);
@@ -1168,8 +1153,7 @@ HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, H
   ink_assert(obj_origin_server_response != NULL);
 
   Variability_t variability = VARIABILITY_NONE;
-  if (http_config_params->cache_enable_default_vary_headers ||
-      obj_origin_server_response->presence(MIME_PRESENCE_VARY)) {
+  if (http_config_params->cache_enable_default_vary_headers || obj_origin_server_response->presence(MIME_PRESENCE_VARY)) {
     ///////////////////////////////////////////////////////////////////////
     // If the origin server sent a Vary header in the response, use that //
     // Vary, otherwise use the default. Ivry adds: However if the origin //
@@ -1179,20 +1163,18 @@ HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, H
     StrList vary_list;
     int num_vary_values = obj_origin_server_response->value_get_comma_list(MIME_FIELD_VARY, MIME_LEN_VARY, &vary_list);
 
-    if (num_vary_values <= 0) {   // no vary hdr, so use defaults if enabled
+    if (num_vary_values <= 0) { // no vary hdr, so use defaults if enabled
       const char *vary_values = NULL;
       const char *content_type;
       int content_type_len;
       char type[32], subtype[32];
 
-      content_type = obj_origin_server_response->value_get(MIME_FIELD_CONTENT_TYPE,
-                                                           MIME_LEN_CONTENT_TYPE, &content_type_len);
+      content_type = obj_origin_server_response->value_get(MIME_FIELD_CONTENT_TYPE, MIME_LEN_CONTENT_TYPE, &content_type_len);
 
       if (content_type) {
-        HttpCompat::parse_mime_type_with_len(content_type, content_type_len, type, subtype, sizeof(type),
-                                             sizeof(subtype));
+        HttpCompat::parse_mime_type_with_len(content_type, content_type_len, type, subtype, sizeof(type), sizeof(subtype));
       } else {
-        type[0] = '\0';
+        type[0]    = '\0';
         subtype[0] = '\0';
       }
 
@@ -1221,8 +1203,9 @@ HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, H
 
     // for each field that varies, see if current & original hdrs match //
     for (Str *field = vary_list.head; field != NULL; field = field->next) {
-      if (field->len == 0)
+      if (field->len == 0) {
         continue;
+      }
 
       /////////////////////////////////////////////////////////////
       // If the field name is unhandled, we should probably do a //
@@ -1232,7 +1215,7 @@ HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, H
 
       Debug("http_match", "Vary: %s", field->str);
       if (((field->str[0] == '*') && (field->str[1] == NUL))) {
-        Debug("http_match", "Wildcard variability --- object not served from cache\n");
+        Debug("http_match", "Wildcard variability --- object not served from cache");
         variability = VARIABILITY_ALL;
         break;
       }
@@ -1240,15 +1223,15 @@ HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, H
       // Special case: if 'proxy.config.http.global_user_agent_header' set                  //
       // we should ignore Vary: User-Agent.                                                 //
       ////////////////////////////////////////////////////////////////////////////////////////
-      if (http_config_params->cache_global_user_agent_header &&
-          !strcasecmp((char *) field->str, "User-Agent"))
+      if (http_config_params->cache_global_user_agent_header && !strcasecmp((char *)field->str, "User-Agent")) {
         continue;
+      }
 
       // Disable Vary mismatch checking for Accept-Encoding.  This is only safe to
       // set if you are promising to fix any Accept-Encoding/Content-Encoding mismatches.
-      if (http_config_params->ignore_accept_encoding_mismatch &&
-          !strcasecmp((char *) field->str, "Accept-Encoding"))
+      if (http_config_params->ignore_accept_encoding_mismatch && !strcasecmp((char *)field->str, "Accept-Encoding")) {
         continue;
+      }
 
       ///////////////////////////////////////////////////////////////////
       // Take the current vary field and look up the headers in        //
@@ -1267,11 +1250,12 @@ HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, H
 
       ink_assert(strlen(field->str) == field->len);
 
-      char *field_name_str = (char *) hdrtoken_string_to_wks(field->str, field->len);
-      if (field_name_str == NULL)
-        field_name_str = (char *) field->str;
+      char *field_name_str = (char *)hdrtoken_string_to_wks(field->str, field->len);
+      if (field_name_str == NULL) {
+        field_name_str = (char *)field->str;
+      }
 
-      MIMEField *cached_hdr_field = obj_client_request->field_find(field_name_str, field->len);
+      MIMEField *cached_hdr_field  = obj_client_request->field_find(field_name_str, field->len);
       MIMEField *current_hdr_field = client_request->field_find(field_name_str, field->len);
 
       // Header values match? //
@@ -1306,7 +1290,7 @@ HttpTransactCache::CalcVariability(CacheLookupHttpConfig * http_config_params, H
 
 */
 HTTPStatus
-HttpTransactCache::match_response_to_request_conditionals(HTTPHdr * request, HTTPHdr * response)
+HttpTransactCache::match_response_to_request_conditionals(HTTPHdr *request, HTTPHdr *response, ink_time_t response_received_time)
 {
   HTTPStatus response_code = HTTP_STATUS_NONE;
 
@@ -1314,70 +1298,73 @@ HttpTransactCache::match_response_to_request_conditionals(HTTPHdr * request, HTT
   ink_assert(response->status_get() != HTTP_STATUS_PRECONDITION_FAILED);
   ink_assert(response->status_get() != HTTP_STATUS_RANGE_NOT_SATISFIABLE);
 
-
-  if (!(request->presence(MIME_PRESENCE_IF_MODIFIED_SINCE |
-                          MIME_PRESENCE_IF_NONE_MATCH |
-                          MIME_PRESENCE_IF_UNMODIFIED_SINCE | MIME_PRESENCE_IF_MATCH | MIME_PRESENCE_RANGE))) {
+  if (!(request->presence(MIME_PRESENCE_IF_MODIFIED_SINCE | MIME_PRESENCE_IF_NONE_MATCH | MIME_PRESENCE_IF_UNMODIFIED_SINCE |
+                          MIME_PRESENCE_IF_MATCH | MIME_PRESENCE_RANGE))) {
     return response->status_get();
   }
-  // return NOT_MODIFIED only if both If-modified-since and If-none-match fail
 
   // If-Modified-Since //
   if (request->presence(MIME_PRESENCE_IF_MODIFIED_SINCE)) {
-    // lm_value is zero if Last-modified not exists
-    ink_time_t lm_value = response->get_last_modified();
+    if (response->presence(MIME_PRESENCE_LAST_MODIFIED)) {
+      ink_time_t lm_value = response->get_last_modified();
 
-    // we won't return NOT_MODIFIED if Last-modified not exists
-    if ((lm_value == 0) || (request->get_if_modified_since() < lm_value)) {
-      return response->status_get();
-    } else {
-      // we cannot return NOT_MODIFIED yet, need to check If-none-match
-      response_code = HTTP_STATUS_NOT_MODIFIED;
-
-      if (!request->presence(MIME_PRESENCE_IF_NONE_MATCH)) {
-        return response_code;
+      // we won't return NOT_MODIFIED if Last-modified is too recent
+      if ((lm_value == 0) || (request->get_if_modified_since() < lm_value)) {
+        return response->status_get();
       }
+
+      response_code = HTTP_STATUS_NOT_MODIFIED;
+    } else if (response->presence(MIME_PRESENCE_DATE)) {
+      ink_time_t date_value = response->get_date();
+
+      // we won't return NOT_MODIFIED if Date is too recent
+      if ((date_value == 0) || (request->get_if_modified_since() < date_value)) {
+        return response->status_get();
+      }
+
+      response_code = HTTP_STATUS_NOT_MODIFIED;
+    } else {
+      // we won't return NOT_MODIFIED if received time is too recent
+      if (request->get_if_modified_since() < response_received_time) {
+        return response->status_get();
+      }
+
+      response_code = HTTP_STATUS_NOT_MODIFIED;
+    }
+
+    // we cannot return NOT_MODIFIED yet, need to check If-none-match
+    if (!request->presence(MIME_PRESENCE_IF_NONE_MATCH)) {
+      return response_code;
     }
   }
 
   // If-None-Match: may match weakly //
   if (request->presence(MIME_PRESENCE_IF_NONE_MATCH)) {
     int raw_etags_len, comma_sep_tag_list_len;
-    const char *raw_etags = response->value_get(MIME_FIELD_ETAG, MIME_LEN_ETAG, &raw_etags_len);
+    const char *raw_etags          = response->value_get(MIME_FIELD_ETAG, MIME_LEN_ETAG, &raw_etags_len);
     const char *comma_sep_tag_list = NULL;
 
     if (raw_etags) {
-      comma_sep_tag_list = request->value_get(MIME_FIELD_IF_NONE_MATCH,
-                                              MIME_LEN_IF_NONE_MATCH, &comma_sep_tag_list_len);
-    } else {
-      // no Etag in the response, so there is nothing to match
-      // against those in If-none-match
-      goto L1;
-    }
+      comma_sep_tag_list = request->value_get(MIME_FIELD_IF_NONE_MATCH, MIME_LEN_IF_NONE_MATCH, &comma_sep_tag_list_len);
+      if (!comma_sep_tag_list) {
+        comma_sep_tag_list     = "";
+        comma_sep_tag_list_len = 0;
+      }
 
-    if (!comma_sep_tag_list) {
-      comma_sep_tag_list = "";
-      comma_sep_tag_list_len = 0;
-    }
-
-    if (!raw_etags) {
-      raw_etags = "";
-      raw_etags_len = 0;
-    }
-    ////////////////////////////////////////////////////////////////////////
-    // If we have an etag and a if-none-match, we are talking to someone  //
-    // who is doing a 1.1 revalidate. Since this is a GET request with no //
-    // sub-ranges, we can do a weak validation.                           //
-    ////////////////////////////////////////////////////////////////////////
-    if (do_strings_match_weakly(raw_etags, raw_etags_len, comma_sep_tag_list, comma_sep_tag_list_len)) {
-      // the response already failed If-modified-since (if one exists)
-      return HTTP_STATUS_NOT_MODIFIED;
-    } else {
-      return response->status_get();
+      ////////////////////////////////////////////////////////////////////////
+      // If we have an etag and a if-none-match, we are talking to someone  //
+      // who is doing a 1.1 revalidate. Since this is a GET request with no //
+      // sub-ranges, we can do a weak validation.                           //
+      ////////////////////////////////////////////////////////////////////////
+      if (do_strings_match_weakly(raw_etags, raw_etags_len, comma_sep_tag_list, comma_sep_tag_list_len)) {
+        // the response already failed If-modified-since (if one exists)
+        return HTTP_STATUS_NOT_MODIFIED;
+      } else {
+        return response->status_get();
+      }
     }
   }
 
-L1:
   // There is no If-none-match, and If-modified-since failed,
   // so return NOT_MODIFIED
   if (response_code != HTTP_STATUS_NONE) {
@@ -1405,7 +1392,7 @@ L1:
   // If-Match: must match strongly //
   if (request->presence(MIME_PRESENCE_IF_MATCH)) {
     int raw_etags_len, comma_sep_tag_list_len;
-    const char *raw_etags = response->value_get(MIME_FIELD_ETAG, MIME_LEN_ETAG, &raw_etags_len);
+    const char *raw_etags          = response->value_get(MIME_FIELD_ETAG, MIME_LEN_ETAG, &raw_etags_len);
     const char *comma_sep_tag_list = NULL;
 
     if (raw_etags) {
@@ -1413,12 +1400,12 @@ L1:
     }
 
     if (!comma_sep_tag_list) {
-      comma_sep_tag_list = "";
+      comma_sep_tag_list     = "";
       comma_sep_tag_list_len = 0;
     }
 
     if (!raw_etags) {
-      raw_etags = "";
+      raw_etags     = "";
       raw_etags_len = 0;
     }
 
@@ -1442,14 +1429,12 @@ L1:
   if (request->presence(MIME_PRESENCE_RANGE) && request->presence(MIME_PRESENCE_IF_RANGE)) {
     int raw_len, comma_sep_list_len;
 
-    const char *if_value = request->value_get(MIME_FIELD_IF_RANGE,
-                                              MIME_LEN_IF_RANGE,
-                                              &comma_sep_list_len);
+    const char *if_value = request->value_get(MIME_FIELD_IF_RANGE, MIME_LEN_IF_RANGE, &comma_sep_list_len);
 
     // this is an ETag, similar to If-Match
     if (!if_value || if_value[0] == '"' || (comma_sep_list_len > 1 && if_value[1] == '/')) {
       if (!if_value) {
-        if_value = "";
+        if_value           = "";
         comma_sep_list_len = 0;
       }
 
@@ -1457,7 +1442,7 @@ L1:
 
       if (!raw_etags) {
         raw_etags = "";
-        raw_len = 0;
+        raw_len   = 0;
       }
 
       if (do_strings_match_strongly(raw_etags, raw_len, if_value, comma_sep_list_len)) {
@@ -1483,14 +1468,13 @@ L1:
   return response->status_get();
 }
 
-
 /*---------------------------------------------------
  *        class CacheLookupHttpConfig
  *---------------------------------------------------*/
 int
 CacheLookupHttpConfig::marshal_length()
 {
-  int len = (int) sizeof(int32_t);
+  int len = (int)sizeof(int32_t);
   len += (cache_vary_default_text ? strlen(cache_vary_default_text) + 1 : 1);
   len += (cache_vary_default_images ? strlen(cache_vary_default_images) + 1 : 1);
   len += (cache_vary_default_other ? strlen(cache_vary_default_other) + 1 : 1);
@@ -1504,28 +1488,32 @@ CacheLookupHttpConfig::marshal(char *buf, int length)
   char *p = buf;
   int len;
 
-  if ((length -= sizeof(int32_t)) < 0)
+  if ((length -= sizeof(int32_t)) < 0) {
     return -1;
+  }
 
-  i32_tmp = (int32_t) cache_enable_default_vary_headers;
+  i32_tmp = (int32_t)cache_enable_default_vary_headers;
   memcpy(p, &i32_tmp, sizeof(int32_t));
   p += sizeof(int32_t);
 
   len = (cache_vary_default_text ? strlen(cache_vary_default_text) + 1 : 1);
-  if ((length -= len) < 0)
+  if ((length -= len) < 0) {
     return -1;
+  }
   ink_strlcpy(p, (cache_vary_default_text ? cache_vary_default_text : ""), length);
   p += len;
 
   len = (cache_vary_default_images ? strlen(cache_vary_default_images) + 1 : 1);
-  if ((length -= len) < 0)
+  if ((length -= len) < 0) {
     return -1;
+  }
   ink_strlcpy(p, (cache_vary_default_images ? cache_vary_default_images : ""), length);
   p += len;
 
   len = (cache_vary_default_other ? strlen(cache_vary_default_other) + 1 : 1);
-  if ((length -= len) < 0)
+  if ((length -= len) < 0) {
     return -1;
+  }
   ink_strlcpy(p, (cache_vary_default_other ? cache_vary_default_other : ""), length);
   p += len;
 
@@ -1533,35 +1521,39 @@ CacheLookupHttpConfig::marshal(char *buf, int length)
 }
 
 int
-CacheLookupHttpConfig::unmarshal(Arena * arena, const char *buf, int buflen)
+CacheLookupHttpConfig::unmarshal(Arena *arena, const char *buf, int buflen)
 {
   const char *p = buf;
-  int length = buflen;
+  int length    = buflen;
   int len;
   int32_t i32_tmp;
 
-  if ((length -= sizeof(int32_t)) < 0)
+  if ((length -= sizeof(int32_t)) < 0) {
     return -1;
+  }
 
   memcpy(&i32_tmp, p, sizeof(int32_t));
-  cache_enable_default_vary_headers = (bool) i32_tmp;
+  cache_enable_default_vary_headers = (bool)i32_tmp;
   p += sizeof(int32_t);
 
   len = strlen(p) + 1;
-  if ((length -= len) < 0)
+  if ((length -= len) < 0) {
     return -1;
+  }
   cache_vary_default_text = arena->str_store(((len == 2) ? "" : p), len - 1);
   p += len;
 
   len = strlen(p) + 1;
-  if ((length -= len) < 0)
+  if ((length -= len) < 0) {
     return -1;
+  }
   cache_vary_default_images = arena->str_store(((len == 2) ? "" : p), len - 1);
   p += len;
 
   len = strlen(p) + 1;
-  if ((length -= len) < 0)
+  if ((length -= len) < 0) {
     return -1;
+  }
   cache_vary_default_other = arena->str_store(((len == 2) ? "" : p), len - 1);
   p += len;
 

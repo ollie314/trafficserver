@@ -25,7 +25,7 @@
 // include files
 //-------------------------------------------------------------------------
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_EventSystem.h"
 
 #include "Log.h"
@@ -36,22 +36,19 @@
 // LogCollationAccept::LogCollationAccept
 //-------------------------------------------------------------------------
 
-LogCollationAccept::LogCollationAccept(int port)
-  : Continuation(new_ProxyMutex()),
-    m_port(port),
-    m_pending_event(NULL)
+LogCollationAccept::LogCollationAccept(int port) : Continuation(new_ProxyMutex()), m_port(port), m_pending_event(NULL)
 {
   NetProcessor::AcceptOptions opt;
-  SET_HANDLER((LogCollationAcceptHandler) & LogCollationAccept::accept_event);
+  SET_HANDLER((LogCollationAcceptHandler)&LogCollationAccept::accept_event);
   // work around for iocore problem where _pre_fetch_buffer can get
   // appended to itself if multiple do_io_reads are called requesting
   // small amounts of data.  Most arguments are default except for the
   // last one which we will set to true.
   // [amc] That argument is ignored so I dropped it.
-  opt.local_port = m_port;
-  opt.ip_family = AF_INET;
+  opt.local_port     = m_port;
+  opt.ip_family      = AF_INET;
   opt.accept_threads = 0;
-  m_accept_action = netProcessor.accept(this, opt);
+  m_accept_action    = netProcessor.accept(this, opt);
   ink_assert(NULL != m_accept_action);
 }
 
@@ -69,10 +66,10 @@ LogCollationAccept::~LogCollationAccept()
     m_accept_action = NULL;
 
     Debug("log-collation", "closing Log::collation_accept_file_descriptor "
-          "(%d)", Log::collation_accept_file_descriptor);
+                           "(%d)",
+          Log::collation_accept_file_descriptor);
     if (::close(Log::collation_accept_file_descriptor) < 0) {
-      Error("error closing collate listen file descriptor [%d]: %s",
-            Log::collation_accept_file_descriptor, strerror(errno));
+      Error("error closing collate listen file descriptor [%d]: %s", Log::collation_accept_file_descriptor, strerror(errno));
     } else {
       Log::collation_accept_file_descriptor = NO_FD;
     }
@@ -92,19 +89,15 @@ LogCollationAccept::~LogCollationAccept()
 //-------------------------------------------------------------------------
 
 int
-LogCollationAccept::accept_event(int event, NetVConnection * net_vc)
+LogCollationAccept::accept_event(int event, NetVConnection *net_vc)
 {
-  LogCollationHostSM *sm;
-
   switch (event) {
   case NET_EVENT_ACCEPT:
-    sm = new LogCollationHostSM(net_vc);
-    ink_assert(NULL != sm);
+    new LogCollationHostSM(net_vc);
     break;
 
   default:
     ink_assert(!"[ERROR] Unexpected Event");
-
   }
 
   return EVENT_CONT;

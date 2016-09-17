@@ -24,17 +24,18 @@
 #ifndef __DYN_ARRAY_H__
 #define __DYN_ARRAY_H__
 
-template<class T> class DynArray {
+template <class T> class DynArray
+{
 public:
-  DynArray(const T * val = 0, intptr_t initial_size = 0);
+  DynArray(const T *val = 0, intptr_t initial_size = 0);
   ~DynArray();
 
 #ifndef __GNUC__
-  operator  const T *() const;
+  operator const T *() const;
 #endif
-  operator  T *();
-  T & operator[](intptr_t idx);
-  T & operator()(intptr_t idx);
+  operator T *();
+  T &operator[](intptr_t idx);
+  T &operator()(intptr_t idx);
   T *detach();
   T defvalue() const;
   intptr_t length();
@@ -45,19 +46,14 @@ private:
   void resize(intptr_t new_size);
 
 private:
-  T * data;
+  T *data;
   const T *default_val;
   int size;
   int pos;
 };
 
-
-template<class T> inline DynArray<T>::DynArray(const T * val, intptr_t initial_size)
-  :
-data(NULL),
-default_val(val),
-size(0),
-pos(-1)
+template <class T>
+inline DynArray<T>::DynArray(const T *val, intptr_t initial_size) : data(NULL), default_val(val), size(0), pos(-1)
 {
   if (initial_size > 0) {
     int i = 1;
@@ -67,41 +63,36 @@ pos(-1)
 
     resize(i);
   }
-
 }
 
-template<class T> inline DynArray<T>::~DynArray()
+template <class T> inline DynArray<T>::~DynArray()
 {
   if (data) {
-    delete[]data;
+    delete[] data;
   }
 }
 
 #ifndef __GNUC__
-template<class T> inline DynArray<T>::operator  const T *()
-const
+template <class T> inline DynArray<T>::operator const T *() const
 {
-  return
-    data;
+  return data;
 }
 #endif
 
-template <
-  class
-  T >
-  inline
-  DynArray <
-  T >::operator
-T * ()
+template <class T> inline DynArray<T>::operator T *()
 {
   return data;
 }
 
-template<class T> inline T & DynArray<T>::operator [](intptr_t idx) {
+template <class T> inline T &DynArray<T>::operator[](intptr_t idx)
+{
   return data[idx];
 }
 
-template<class T> inline T & DynArray<T>::operator ()(intptr_t idx) {
+template <class T>
+inline T &
+DynArray<T>::operator()(intptr_t idx)
+{
   if (idx >= size) {
     intptr_t new_size;
 
@@ -125,43 +116,55 @@ template<class T> inline T & DynArray<T>::operator ()(intptr_t idx) {
   return data[idx];
 }
 
-template<class T> inline T * DynArray<T>::detach()
+template <class T>
+inline T *
+DynArray<T>::detach()
 {
   T *d;
 
-  d = data;
+  d    = data;
   data = NULL;
 
   return d;
 }
 
-template<class T> inline T DynArray<T>::defvalue() const
+template <class T>
+inline T
+DynArray<T>::defvalue() const
 {
   return *default_val;
 }
 
-template<class T> inline intptr_t DynArray<T>::length()
+template <class T>
+inline intptr_t
+DynArray<T>::length()
 {
   return pos + 1;
 }
 
-template<class T> inline void DynArray<T>::clear()
+template <class T>
+inline void
+DynArray<T>::clear()
 {
   if (data) {
-    delete[]data;
+    delete[] data;
     data = NULL;
   }
 
   size = 0;
-  pos = -1;
+  pos  = -1;
 }
 
-template<class T> inline void DynArray<T>::set_length(intptr_t i)
+template <class T>
+inline void
+DynArray<T>::set_length(intptr_t i)
 {
   pos = i - 1;
 }
 
-template<class T> inline void DynArray<T>::resize(intptr_t new_size)
+template <class T>
+inline void
+DynArray<T>::resize(intptr_t new_size)
 {
   if (new_size > size) {
     T *new_data;
@@ -175,17 +178,15 @@ template<class T> inline void DynArray<T>::resize(intptr_t new_size)
 
     for (; i < new_size; i++) {
       if (default_val)
-        new_data[i] = (T) * default_val;
+        new_data[i] = (T)*default_val;
     }
 
     if (data) {
-      delete[]data;
+      delete[] data;
     }
     data = new_data;
     size = new_size;
   }
 }
 
-
 #endif /* __DYN_ARRAY_H__ */
-

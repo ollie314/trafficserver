@@ -19,7 +19,6 @@
 AM_CPPFLAGS = \
   -I$(top_srcdir)/lib \
   -I$(top_srcdir)/lib/records \
-  -I$(top_srcdir)/lib/ts \
   -I$(top_srcdir)/iocore/eventsystem
 
 noinst_LIBRARIES = libinkutils.a
@@ -31,3 +30,8 @@ libinkutils_a_SOURCES = \
   Machine.cc \
   OneWayMultiTunnel.cc \
   OneWayTunnel.cc
+
+include $(top_srcdir)/build/tidy.mk
+
+tidy-local: $(DIST_SOURCES)
+	$(CXX_Clang_Tidy)

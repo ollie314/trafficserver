@@ -26,69 +26,84 @@
 // ugly -- just encapsulate the I/O result so that it can be passed
 // back to the caller via continuation handler.
 
-class UDPIOEvent:public Event
+class UDPIOEvent : public Event
 {
 public:
-  UDPIOEvent():fd(-1), err(0), m(0), handle(0), b(0), bytesTransferred(0)
+  UDPIOEvent() : fd(-1), err(0), m(0), handle(0), b(0), bytesTransferred(0){};
+  ~UDPIOEvent(){};
+
+  void
+  setInfo(int fd_, const Ptr<IOBufferBlock> &b_, int bytesTransferred_, int errno_)
   {
-  };
-  ~UDPIOEvent() {
-  };
-  void setInfo(int fd_, IOBufferBlock * b_, int bytesTransferred_, int errno_)
-  {
-    fd = fd_;
-    b = b_;
+    fd               = fd_;
+    b                = b_;
     bytesTransferred = bytesTransferred_;
-    err = errno_;
+    err              = errno_;
   };
-  void setInfo(int fd_, struct msghdr *m_, int bytesTransferred_, int errno_)
+
+  void
+  setInfo(int fd_, struct msghdr *m_, int bytesTransferred_, int errno_)
   {
-    fd = fd_;
-    m = m_;
+    fd               = fd_;
+    m                = m_;
     bytesTransferred = bytesTransferred_;
-    err = errno_;
+    err              = errno_;
   };
-  void setHandle(void *v)
+
+  void
+  setHandle(void *v)
   {
     handle = v;
   }
-  void *getHandle()
+
+  void *
+  getHandle()
   {
     return handle;
   }
-  void free();
-  int getBytesTransferred()
+
+  int
+  getBytesTransferred() const
   {
     return bytesTransferred;
   }
-  IOBufferBlock *getIOBufferBlock()
+
+  IOBufferBlock *
+  getIOBufferBlock() const
   {
-    return b;
+    return b.get();
   }
-  int getError()
+
+  int
+  getError() const
   {
     return err;
   }
-  Continuation *getContinuation()
+
+  Continuation *
+  getContinuation() const
   {
     return continuation;
   }
-  static void free(UDPIOEvent * e);
+
+  void free();
+  static void free(UDPIOEvent *e);
+
 private:
-  void *operator  new(size_t size);     // undefined
+  void *operator new(size_t size); // undefined
   int fd;
-  int err;                      // error code
+  int err; // error code
   struct msghdr *m;
-  void *handle;                 // some extra data for the client handler
-  Ptr<IOBufferBlock> b;      // holds buffer that I/O will go to
-  int bytesTransferred;         // actual bytes transferred
+  void *handle;         // some extra data for the client handler
+  Ptr<IOBufferBlock> b; // holds buffer that I/O will go to
+  int bytesTransferred; // actual bytes transferred
 };
 
 extern ClassAllocator<UDPIOEvent> UDPIOEventAllocator;
 TS_INLINE void
-UDPIOEvent::free(UDPIOEvent * e)
+UDPIOEvent::free(UDPIOEvent *e)
 {
-  e->b = NULL;
+  e->b     = NULL;
   e->mutex = NULL;
   UDPIOEventAllocator.free(e);
 }

@@ -26,14 +26,15 @@
 const OperModifiers
 Operator::get_oper_modifiers() const
 {
-  if (_next)
-    return static_cast<OperModifiers>(_mods | static_cast<Operator*>(_next)->get_oper_modifiers());
+  if (_next) {
+    return static_cast<OperModifiers>(_mods | static_cast<Operator *>(_next)->get_oper_modifiers());
+  }
 
   return _mods;
 }
 
 void
-Operator::initialize(Parser& p)
+Operator::initialize(Parser &p)
 {
   Statement::initialize(p);
 
@@ -44,11 +45,10 @@ Operator::initialize(Parser& p)
   if (p.mod_exist("QSA")) {
     _mods = static_cast<OperModifiers>(_mods | OPER_QSA);
   }
-
 }
 
 void
-OperatorHeaders::initialize(Parser& p)
+OperatorHeaders::initialize(Parser &p)
 {
   Operator::initialize(p);
 
@@ -58,4 +58,15 @@ OperatorHeaders::initialize(Parser& p)
   require_resources(RSRC_SERVER_REQUEST_HEADERS);
   require_resources(RSRC_CLIENT_REQUEST_HEADERS);
   require_resources(RSRC_CLIENT_RESPONSE_HEADERS);
+}
+
+void
+OperatorCookies::initialize(Parser &p)
+{
+  Operator::initialize(p);
+
+  _cookie = p.get_arg();
+
+  require_resources(RSRC_SERVER_REQUEST_HEADERS);
+  require_resources(RSRC_CLIENT_REQUEST_HEADERS);
 }

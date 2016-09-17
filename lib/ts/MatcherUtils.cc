@@ -29,9 +29,15 @@
  *
  ****************************************************************************/
 
-#include "libts.h"      /* MAGIC_EDITING_TAG */
+#include "ts/ink_platform.h"
+#include "ts/Diags.h"
+#include "ts/ink_memory.h"
+#include "ts/ink_inet.h"
+#include "ts/ink_assert.h"
+#include "ts/MatcherUtils.h"
+#include "ts/Tokenizer.h"
 
-config_parse_error::config_parse_error(const char * fmt, ...)
+config_parse_error::config_parse_error(const char *fmt, ...)
 {
   va_list ap;
   int num;
@@ -47,7 +53,6 @@ config_parse_error::config_parse_error(const char * fmt, ...)
   va_end(ap);
 }
 
-
 // char* readIntoBuffer(const char* file_path, const char* module_name,
 //                          int* read_size_ptr)
 //
@@ -60,7 +65,6 @@ config_parse_error::config_parse_error(const char * fmt, ...)
 char *
 readIntoBuffer(const char *file_path, const char *module_name, int *read_size_ptr)
 {
-
   int fd;
   struct stat file_info;
   char *file_buf;
@@ -83,7 +87,7 @@ readIntoBuffer(const char *file_path, const char *module_name, int *read_size_pt
   }
 
   if (file_info.st_size < 0) {
-    Error("%s Can not get correct file size for %s file : %" PRId64 "", module_name, file_path, (int64_t) file_info.st_size);
+    Error("%s Can not get correct file size for %s file : %" PRId64 "", module_name, file_path, (int64_t)file_info.st_size);
     close(fd);
     return NULL;
   }
@@ -104,8 +108,7 @@ readIntoBuffer(const char *file_path, const char *module_name, int *read_size_pt
   } else if (read_size < file_info.st_size) {
     // We don't want to signal this error on WIN32 because the sizes
     // won't match if the file contains any CR/LF sequence.
-    Error("%s Only able to read %d bytes out %d for %s file",
-          module_name, read_size, (int) file_info.st_size, file_path);
+    Error("%s Only able to read %d bytes out %d for %s file", module_name, read_size, (int)file_info.st_size, file_path);
     file_buf[read_size] = '\0';
   }
 
@@ -126,7 +129,7 @@ readIntoBuffer(const char *file_path, const char *module_name, int *read_size_pt
 int
 unescapifyStr(char *buffer)
 {
-  char *read = buffer;
+  char *read  = buffer;
   char *write = buffer;
   char subStr[3];
 
@@ -135,7 +138,7 @@ unescapifyStr(char *buffer)
     if (*read == '%' && *(read + 1) != '\0' && *(read + 2) != '\0') {
       subStr[0] = *(++read);
       subStr[1] = *(++read);
-      *write = (char)strtol(subStr, (char **) NULL, 16);
+      *write    = (char)strtol(subStr, (char **)NULL, 16);
       read++;
       write++;
     } else if (*read == '+') {
@@ -153,14 +156,17 @@ unescapifyStr(char *buffer)
   return (write - buffer);
 }
 
-char const*
-ExtractIpRange(char* match_str, in_addr_t* min, in_addr_t* max) {
+char const *
+ExtractIpRange(char *match_str, in_addr_t *min, in_addr_t *max)
+{
   IpEndpoint ip_min, ip_max;
-  char const* zret = ExtractIpRange(match_str, &ip_min.sa, &ip_max.sa);
+  char const *zret = ExtractIpRange(match_str, &ip_min.sa, &ip_max.sa);
   if (0 == zret) { // success
     if (ats_is_ip4(&ip_min) && ats_is_ip4(&ip_max)) {
-      if (min) *min = ntohl(ats_ip4_addr_cast(&ip_min));
-      if (max) *max = ntohl(ats_ip4_addr_cast(&ip_max));
+      if (min)
+        *min = ntohl(ats_ip4_addr_cast(&ip_min));
+      if (max)
+        *max = ntohl(ats_ip4_addr_cast(&ip_max));
     } else {
       zret = "The addresses were not IPv4 addresses.";
     }
@@ -183,7 +189,7 @@ ExtractIpRange(char* match_str, in_addr_t* min, in_addr_t* max) {
 //     that describes the reason for the error.
 //
 const char *
-ExtractIpRange(char *match_str, sockaddr* addr1, sockaddr* addr2)
+ExtractIpRange(char *match_str, sockaddr *addr1, sockaddr *addr2)
 {
   Tokenizer rangeTok("-/");
   bool mask = strchr(match_str, '/') != NULL;
@@ -207,7 +213,6 @@ ExtractIpRange(char *match_str, sockaddr* addr1, sockaddr* addr2)
 
   // Handle a IP range
   if (numToks == 2) {
-
     if (mask) {
       if (!ats_is_ip4(&la1)) {
         return "Masks supported only for IPv4";
@@ -263,7 +268,7 @@ tokLine(char *buf, char **last, char cont)
 
   if (buf != NULL) {
     start = cur = buf;
-    *last = buf;
+    *last       = buf;
   } else {
     start = cur = (*last) + 1;
   }
@@ -272,10 +277,9 @@ tokLine(char *buf, char **last, char cont)
     if (*cur == '\n') {
       if (cont != '\0' && prev != NULL && *prev == cont) {
         *prev = ' ';
-        *cur = ' ';
-      }
-      else {
-        *cur = '\0';
+        *cur  = ' ';
+      } else {
+        *cur  = '\0';
         *last = cur;
         return start;
       }
@@ -293,15 +297,7 @@ tokLine(char *buf, char **last, char cont)
   return NULL;
 }
 
-const char *matcher_type_str[] = {
-  "invalid",
-  "host",
-  "domain",
-  "ip",
-  "url_regex",
-  "url",
-  "host_regex"
-};
+const char *matcher_type_str[] = {"invalid", "host", "domain", "ip", "url_regex", "url", "host_regex"};
 
 // char* processDurationString(char* str, int* seconds)
 //
@@ -322,7 +318,7 @@ const char *matcher_type_str[] = {
 const char *
 processDurationString(char *str, int *seconds)
 {
-  char *s = str;
+  char *s       = str;
   char *current = str;
   char unit;
   int tmp;
@@ -337,7 +333,6 @@ processDurationString(char *str, int *seconds)
   len = strlen(str);
   for (int i = 0; i < len; i++) {
     if (!ParseRules::is_digit(*current)) {
-
       // Make sure there is a time to proces
       if (current == s) {
         return "Malformed time";
@@ -379,7 +374,6 @@ processDurationString(char *str, int *seconds)
 
       result += (multiplier * tmp);
       s = current + 1;
-
     }
     current++;
   }
@@ -405,17 +399,11 @@ processDurationString(char *str, int *seconds)
   return NULL;
 }
 
-const matcher_tags http_dest_tags = {
-  "dest_host", "dest_domain", "dest_ip", "url_regex", "url", "host_regex", true
-};
+const matcher_tags http_dest_tags = {"dest_host", "dest_domain", "dest_ip", "url_regex", "url", "host_regex", true};
 
-const matcher_tags ip_allow_tags = {
-  NULL, NULL, "src_ip", NULL, NULL, NULL, false
-};
+const matcher_tags ip_allow_tags = {NULL, NULL, "src_ip", NULL, NULL, NULL, false};
 
-const matcher_tags socks_server_tags = {
-  NULL, NULL, "dest_ip", NULL, NULL, NULL, false
-};
+const matcher_tags socks_server_tags = {NULL, NULL, "dest_ip", NULL, NULL, NULL, false};
 
 // char* parseConfigLine(char* line, matcher_line* p_line,
 //                       const matcher_tags* tags)
@@ -427,22 +415,24 @@ const matcher_tags socks_server_tags = {
 //     a static error string is returned
 //
 const char *
-parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
+parseConfigLine(char *line, matcher_line *p_line, const matcher_tags *tags)
 {
-  enum pState
-  {
-    FIND_LABEL, PARSE_LABEL,
-    PARSE_VAL, START_PARSE_VAL, CONSUME
+  enum pState {
+    FIND_LABEL,
+    PARSE_LABEL,
+    PARSE_VAL,
+    START_PARSE_VAL,
+    CONSUME,
   };
 
-  pState state = FIND_LABEL;
-  bool inQuote = false;
+  pState state      = FIND_LABEL;
+  bool inQuote      = false;
   char *copyForward = NULL;
-  char *copyFrom = NULL;
-  char *s = line;
-  char *label = NULL;
-  char *val = NULL;
-  int num_el = 0;
+  char *copyFrom    = NULL;
+  char *s           = line;
+  char *label       = NULL;
+  char *val         = NULL;
+  int num_el        = 0;
   matcher_type type = MATCH_NONE;
 
   // Zero out the parsed line structure
@@ -453,7 +443,6 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
   }
 
   do {
-
     switch (state) {
     case FIND_LABEL:
       if (!isspace(*s)) {
@@ -464,7 +453,7 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
       break;
     case PARSE_LABEL:
       if (*s == '=') {
-        *s = '\0';
+        *s    = '\0';
         state = START_PARSE_VAL;
       }
       s++;
@@ -472,18 +461,17 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
     case START_PARSE_VAL:
       // Init state needed for parsing values
       copyForward = NULL;
-      copyFrom = NULL;
+      copyFrom    = NULL;
 
       if (*s == '"') {
         inQuote = true;
-        val = s + 1;
+        val     = s + 1;
       } else if (*s == '\\') {
         inQuote = false;
-        val = s + 1;
+        val     = s + 1;
       } else {
         inQuote = false;
-        val = s;
-
+        val     = s;
       }
 
       if (inQuote == false && (isspace(*s) || *(s + 1) == '\0')) {
@@ -516,7 +504,7 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
             copyFrom = s + 1;
           } else {
             copyForward = s;
-            copyFrom = s + 1;
+            copyFrom    = s + 1;
           }
 
           // Scroll past the escape character
@@ -529,17 +517,16 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
           }
         } else if (*s == '"') {
           state = CONSUME;
-          *s = '\0';
+          *s    = '\0';
         }
-      } else if ((*s == '\\' && ParseRules::is_digit(*(s + 1)))
-                 || !ParseRules::is_char(*s)) {
+      } else if ((*s == '\\' && ParseRules::is_digit(*(s + 1))) || !ParseRules::is_char(*s)) {
         // INKqa10511
         // traffic server need to handle unicode characters
         // right now ignore the entry
         return "Unrecognized encoding scheme";
       } else if (isspace(*s)) {
         state = CONSUME;
-        *s = '\0';
+        *s    = '\0';
       }
 
       s++;
@@ -555,7 +542,6 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
     }
 
     if (state == CONSUME) {
-
       // See if there are any quote copy overs
       //   we've pushed into the future
       if (copyForward != NULL) {
@@ -566,7 +552,7 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
 
       p_line->line[0][num_el] = label;
       p_line->line[1][num_el] = val;
-      type = MATCH_NONE;
+      type                    = MATCH_NONE;
 
       // Check to see if this the primary specifier we are looking for
       if (tags->match_ip && strcasecmp(tags->match_ip, label) == 0) {
@@ -593,7 +579,7 @@ parseConfigLine(char *line, matcher_line *p_line, const matcher_tags * tags)
           }
         } else {
           p_line->dest_entry = num_el;
-          p_line->type = type;
+          p_line->type       = type;
         }
       }
       num_el++;

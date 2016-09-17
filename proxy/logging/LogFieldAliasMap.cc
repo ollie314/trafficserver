@@ -27,18 +27,18 @@
 
  ***************************************************************************/
 
-#include "ink_config.h"
+#include "ts/ink_config.h"
 #include "LogFieldAliasMap.h"
-#include "ink_assert.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_memory.h"
 
 void
 LogFieldAliasTable::init(size_t numPairs, ...)
 {
-
   ink_assert(numPairs > 0);
 
   if (m_table) {
-    delete[]m_table;
+    delete[] m_table;
   }
 
   size_t n;
@@ -52,7 +52,7 @@ LogFieldAliasTable::init(size_t numPairs, ...)
      explicitly cast, they will come through as "int" sized values.
   */
   m_min = m_max = va_arg(ap, int);
-  va_arg(ap, char *);    // ignore next arg. for now
+  va_arg(ap, char *); // ignore next arg. for now
 
   for (n = 1; n < numPairs; n++) {
     IntType val = va_arg(ap, int);
@@ -61,23 +61,23 @@ LogFieldAliasTable::init(size_t numPairs, ...)
     } else if (val > m_max) {
       m_max = val;
     }
-    va_arg(ap, char *);  // ignore next arg. for now
+    va_arg(ap, char *); // ignore next arg. for now
   }
 
   va_end(ap);
   va_start(ap, numPairs);
 
   m_entries = m_max - m_min + 1;
-  m_table = new LogFieldAliasTableEntry[m_entries];
+  m_table   = new LogFieldAliasTableEntry[m_entries];
 
   for (n = 0; n < numPairs; n++) {
     IntType val = va_arg(ap, int);
-    size_t i = val - m_min;
-    name = va_arg(ap, char *);
+    size_t i    = val - m_min;
+    name        = va_arg(ap, char *);
 
-    m_table[i].name = ats_strdup(name);
+    m_table[i].name   = ats_strdup(name);
     m_table[i].length = strlen(name);
-    m_table[i].valid = true;
+    m_table[i].valid  = true;
   }
 
   va_end(ap);

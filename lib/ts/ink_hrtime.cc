@@ -28,9 +28,9 @@
   This file contains code supporting the Inktomi high-resolution timer.
 **************************************************************************/
 
-#include "ink_hrtime.h"
-#include "ink_assert.h"
-#include "ink_defs.h"
+#include "ts/ink_hrtime.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_defs.h"
 
 #if defined(freebsd)
 #include <sys/types.h>
@@ -45,31 +45,31 @@ int64_to_str(char *buf, unsigned int buf_size, int64_t val, unsigned int *total_
   const unsigned int local_buf_size = 32;
   char local_buf[local_buf_size];
   bool using_local_buffer = false;
-  bool negative = false;
+  bool negative           = false;
   char *out_buf;
 
   if (buf_size < 22) {
     // int64_t may not fit in provided buffer, use the local one
-    out_buf = &local_buf[local_buf_size - 1];
+    out_buf            = &local_buf[local_buf_size - 1];
     using_local_buffer = true;
   } else {
     out_buf = &buf[buf_size - 1];
   }
 
-  unsigned int num_chars = 1;   // includes eos
-  *out_buf-- = 0;
+  unsigned int num_chars = 1; // includes eos
+  *out_buf--             = 0;
 
   if (val < 0) {
-    val = -val;
+    val      = -val;
     negative = true;
   }
 
   if (val < 10) {
-    *out_buf-- = '0' + (char) val;
+    *out_buf-- = '0' + (char)val;
     ++num_chars;
   } else {
     do {
-      *out_buf-- = (char) (val % 10) + '0';
+      *out_buf-- = (char)(val % 10) + '0';
       val /= 10;
       ++num_chars;
     } while (val);
@@ -86,7 +86,7 @@ int64_to_str(char *buf, unsigned int buf_size, int64_t val, unsigned int *total_
       out_buf++;
     }
     if (req_width > buf_size)
-      req_width = buf_size;
+      req_width              = buf_size;
     unsigned int num_padding = 0;
     if (req_width > num_chars) {
       num_padding = req_width - num_chars;
@@ -99,14 +99,15 @@ int64_to_str(char *buf, unsigned int buf_size, int64_t val, unsigned int *total_
         *--out_buf = pad_char;
         break;
       default:
-        for (unsigned int i = 0; i < num_padding; ++i, *--out_buf = pad_char);
+        for (unsigned int i = 0; i < num_padding; ++i, *--out_buf = pad_char)
+          ;
       }
       num_chars += num_padding;
     }
     // add minus sign if padding character is 0
     if (negative && pad_char == '0') {
       if (num_padding) {
-        *out_buf = '-';         // overwrite padding
+        *out_buf = '-'; // overwrite padding
       } else {
         *--out_buf = '-';
         ++num_chars;
@@ -134,7 +135,6 @@ int64_to_str(char *buf, unsigned int buf_size, int64_t val, unsigned int *total_
   return out_buf;
 }
 
-
 int
 squid_timestamp_to_buf(char *buf, unsigned int buf_size, long timestamp_sec, long timestamp_usec)
 {
@@ -149,18 +149,18 @@ squid_timestamp_to_buf(char *buf, unsigned int buf_size, long timestamp_sec, lon
   // convert milliseconds
   //
   tmp_buf[tmp_buf_size - 5] = '.';
-  int ms = timestamp_usec / 1000;
+  int ms                    = timestamp_usec / 1000;
   unsigned int num_chars_ms;
   char ATS_UNUSED *ts_ms = int64_to_str(&tmp_buf[tmp_buf_size - 4], 4, ms, &num_chars_ms, 4, '0');
   ink_assert(ts_ms && num_chars_ms == 4);
 
-  unsigned int chars_to_write = num_chars_s + 3;        // no eos
+  unsigned int chars_to_write = num_chars_s + 3; // no eos
 
   if (buf_size >= chars_to_write) {
     memcpy(buf, ts_s, chars_to_write);
     res = chars_to_write;
   } else {
-    res = -((int) chars_to_write);
+    res = -((int)chars_to_write);
   }
 
   return res;
@@ -171,16 +171,16 @@ uint32_t
 init_hrtime_TCS()
 {
   int freqlen = sizeof(hrtime_freq);
-  if (sysctlbyname("machdep.tsc_freq", &hrtime_freq, (size_t *) & freqlen, NULL, 0) < 0) {
+  if (sysctlbyname("machdep.tsc_freq", &hrtime_freq, (size_t *)&freqlen, NULL, 0) < 0) {
     perror("sysctl: machdep.tsc_freq");
     exit(1);
   }
-  hrtime_freq_float = (double) 1000000000 / (double) hrtime_freq;
+  hrtime_freq_float = (double)1000000000 / (double)hrtime_freq;
   return hrtime_freq;
 }
 
 double hrtime_freq_float = 0.5; // 500 Mhz
-uint32_t hrtime_freq = init_hrtime_TCS();
+uint32_t hrtime_freq     = init_hrtime_TCS();
 #endif
 
 #ifdef NEED_HRTIME_BASIS
@@ -204,19 +204,19 @@ init_hrtime_basis()
     {
       struct timeval tnow;
       ink_assert(!gettimeofday(&tnow, NULL));
-      timespec_basis.tv_sec = tnow.tv_sec;
+      timespec_basis.tv_sec  = tnow.tv_sec;
       timespec_basis.tv_nsec = tnow.tv_usec * 1000;
     }
 #endif
     t2 = ink_get_hrtime_internal();
     // accuracy must be at least 100 microseconds
   } while (t2 - t1 > HRTIME_USECONDS(100));
-  b = (t2 + t1) / 2;
+  b   = (t2 + t1) / 2;
   now = ink_hrtime_from_timespec(&timespec_basis);
-  ts = ink_hrtime_to_timespec(now);
+  ts  = ink_hrtime_to_timespec(now);
   ink_assert(ts.tv_sec == timespec_basis.tv_sec && ts.tv_nsec == timespec_basis.tv_nsec);
   hrtime_offset = now - b;
-  hrtime_basis = b;
+  hrtime_basis  = b;
   return b;
 }
 #endif

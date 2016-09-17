@@ -25,7 +25,7 @@
 #include <string.h>
 
 #include "ts/ts.h"
-#include "ink_defs.h"
+#include "ts/ink_defs.h"
 
 #define MAX_NSITES 500
 #define RETRY_TIME 10
@@ -38,14 +38,11 @@ static TSCont global_contp;
 
 static void handle_txn_start(TSCont contp, TSHttpTxn txnp);
 
-typedef struct contp_data
-{
-
-  enum calling_func
-  {
+typedef struct contp_data {
+  enum calling_func {
     HANDLE_DNS,
     HANDLE_RESPONSE,
-    READ_BLACKLIST
+    READ_BLACKLIST,
   } cf;
 
   TSHttpTxn txnp;
@@ -57,7 +54,7 @@ destroy_continuation(TSHttpTxn txnp, TSCont contp)
 {
   cdata *cd = NULL;
 
-  cd = (cdata *) TSContDataGet(contp);
+  cd = (cdata *)TSContDataGet(contp);
   if (cd != NULL) {
     TSfree(cd);
   }
@@ -65,7 +62,6 @@ destroy_continuation(TSHttpTxn txnp, TSCont contp)
   TSHttpTxnReenable(txnp, TS_EVENT_HTTP_CONTINUE);
   return;
 }
-
 
 static void
 handle_dns(TSHttpTxn txnp, TSCont contp)
@@ -78,19 +74,19 @@ handle_dns(TSHttpTxn txnp, TSCont contp)
   int host_length;
 
   if (TSHttpTxnClientReqGet(txnp, &bufp, &hdr_loc) != TS_SUCCESS) {
-    TSError("couldn't retrieve client request header\n");
+    TSError("[blacklist-1] Couldn't retrieve client request header");
     goto done;
   }
 
   if (TSHttpHdrUrlGet(bufp, hdr_loc, &url_loc) != TS_SUCCESS) {
-    TSError("couldn't retrieve request url\n");
+    TSError("[blacklist-1] Couldn't retrieve request url");
     TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc);
     goto done;
   }
 
   host = TSUrlHostGet(bufp, url_loc, &host_length);
   if (!host) {
-    TSError("couldn't retrieve request hostname\n");
+    TSError("[blacklist-1] Couldn't retrieve request hostname");
     TSHandleMLocRelease(bufp, hdr_loc, url_loc);
     TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc);
     goto done;
@@ -111,7 +107,7 @@ handle_dns(TSHttpTxn txnp, TSCont contp)
       if (log) {
         TSTextLogObjectWrite(log, "blacklisting site: %s", sites[i]);
       } else {
-        TSDebug("blacklist-1", "blacklisting site: %s\n", sites[i]);
+        TSDebug("blacklist-1", "blacklisting site: %s", sites[i]);
       }
       TSHttpTxnHookAdd(txnp, TS_HTTP_SEND_RESPONSE_HDR_HOOK, contp);
       TSHandleMLocRelease(bufp, hdr_loc, url_loc);
@@ -141,28 +137,27 @@ handle_response(TSHttpTxn txnp, TSCont contp ATS_UNUSED)
   int url_length;
 
   if (TSHttpTxnClientRespGet(txnp, &bufp, &hdr_loc) != TS_SUCCESS) {
-    TSError("couldn't retrieve client response header\n");
+    TSError("[blacklist-1] Couldn't retrieve client response header");
     goto done;
   }
 
   TSHttpHdrStatusSet(bufp, hdr_loc, TS_HTTP_STATUS_FORBIDDEN);
-  TSHttpHdrReasonSet(bufp, hdr_loc,
-                      TSHttpHdrReasonLookup(TS_HTTP_STATUS_FORBIDDEN),
-                      strlen(TSHttpHdrReasonLookup(TS_HTTP_STATUS_FORBIDDEN)));
+  TSHttpHdrReasonSet(bufp, hdr_loc, TSHttpHdrReasonLookup(TS_HTTP_STATUS_FORBIDDEN),
+                     strlen(TSHttpHdrReasonLookup(TS_HTTP_STATUS_FORBIDDEN)));
 
   if (TSHttpTxnClientReqGet(txnp, &bufp, &hdr_loc) != TS_SUCCESS) {
-    TSError("couldn't retrieve client request header\n");
+    TSError("[blacklist-1] Couldn't retrieve client request header");
     TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc);
     goto done;
   }
 
   if (TSHttpHdrUrlGet(bufp, hdr_loc, &url_loc) != TS_SUCCESS) {
-    TSError("couldn't retrieve request url\n");
+    TSError("[blacklist-1] Couldn't retrieve request url");
     TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc);
     goto done;
   }
 
-  buf = (char *) TSmalloc(4096);
+  buf = (char *)TSmalloc(4096);
 
   url_str = TSUrlStringGet(bufp, url_loc, &url_length);
   sprintf(buf, "You are forbidden from accessing \"%s\"\n", url_str);
@@ -183,7 +178,7 @@ read_blacklist(TSCont contp)
   TSFile file;
 
   sprintf(blacklist_file, "%s/blacklist.txt", TSPluginDirGet());
-  file = TSfopen(blacklist_file, "r");
+  file   = TSfopen(blacklist_file, "r");
   nsites = 0;
 
   /* If the Mutext lock is not successful try again in RETRY_TIME */
@@ -218,12 +213,11 @@ read_blacklist(TSCont contp)
 
     TSfclose(file);
   } else {
-    TSError("unable to open %s\n", blacklist_file);
-    TSError("all sites will be allowed\n");
+    TSError("[blacklist-1] Unable to open %s", blacklist_file);
+    TSError("[blacklist-1] All sites will be allowed");
   }
 
   TSMutexUnlock(sites_mutex);
-
 }
 
 static int
@@ -234,12 +228,12 @@ blacklist_plugin(TSCont contp, TSEvent event, void *edata)
 
   switch (event) {
   case TS_EVENT_HTTP_TXN_START:
-    txnp = (TSHttpTxn) edata;
+    txnp = (TSHttpTxn)edata;
     handle_txn_start(contp, txnp);
     return 0;
   case TS_EVENT_HTTP_OS_DNS:
     if (contp != global_contp) {
-      cd = (cdata *) TSContDataGet(contp);
+      cd     = (cdata *)TSContDataGet(contp);
       cd->cf = HANDLE_DNS;
       handle_dns(cd->txnp, contp);
       return 0;
@@ -247,14 +241,14 @@ blacklist_plugin(TSCont contp, TSEvent event, void *edata)
       break;
     }
   case TS_EVENT_HTTP_TXN_CLOSE:
-    txnp = (TSHttpTxn) edata;
+    txnp = (TSHttpTxn)edata;
     if (contp != global_contp) {
       destroy_continuation(txnp, contp);
     }
     break;
   case TS_EVENT_HTTP_SEND_RESPONSE_HDR:
     if (contp != global_contp) {
-      cd = (cdata *) TSContDataGet(contp);
+      cd     = (cdata *)TSContDataGet(contp);
       cd->cf = HANDLE_RESPONSE;
       handle_response(cd->txnp, contp);
       return 0;
@@ -267,7 +261,7 @@ blacklist_plugin(TSCont contp, TSEvent event, void *edata)
        edata. We need to decide, in which function did the MutexLock
        failed and call that function again */
     if (contp != global_contp) {
-      cd = (cdata *) TSContDataGet(contp);
+      cd = (cdata *)TSContDataGet(contp);
       switch (cd->cf) {
       case HANDLE_DNS:
         handle_dns(cd->txnp, contp);
@@ -276,7 +270,7 @@ blacklist_plugin(TSCont contp, TSEvent event, void *edata)
         handle_response(cd->txnp, contp);
         return 0;
       default:
-	TSDebug("blacklist_plugin", "This event was unexpected: %d\n", event);
+        TSDebug("blacklist_plugin", "This event was unexpected: %d", event);
         break;
       }
     } else {
@@ -295,9 +289,9 @@ handle_txn_start(TSCont contp ATS_UNUSED, TSHttpTxn txnp)
   TSCont txn_contp;
   cdata *cd;
 
-  txn_contp = TSContCreate((TSEventFunc) blacklist_plugin, TSMutexCreate());
+  txn_contp = TSContCreate((TSEventFunc)blacklist_plugin, TSMutexCreate());
   /* create the data that'll be associated with the continuation */
-  cd = (cdata *) TSmalloc(sizeof(cdata));
+  cd = (cdata *)TSmalloc(sizeof(cdata));
   TSContDataSet(txn_contp, cd);
 
   cd->txnp = txnp;
@@ -308,7 +302,6 @@ handle_txn_start(TSCont contp ATS_UNUSED, TSHttpTxn txnp)
   TSHttpTxnReenable(txnp, TS_EVENT_HTTP_CONTINUE);
 }
 
-
 void
 TSPluginInit(int argc ATS_UNUSED, const char *argv[] ATS_UNUSED)
 {
@@ -316,12 +309,12 @@ TSPluginInit(int argc ATS_UNUSED, const char *argv[] ATS_UNUSED)
   TSPluginRegistrationInfo info;
   TSReturnCode error;
 
-  info.plugin_name = "blacklist-1";
-  info.vendor_name = "MyCompany";
+  info.plugin_name   = "blacklist-1";
+  info.vendor_name   = "MyCompany";
   info.support_email = "ts-api-support@MyCompany.com";
 
-  if (TSPluginRegister(TS_SDK_VERSION_3_0, &info) != TS_SUCCESS) {
-    TSError("Plugin registration failed.\n");
+  if (TSPluginRegister(&info) != TS_SUCCESS) {
+    TSError("[blacklist-1] Plugin registration failed.");
   }
 
   /* create an TSTextLogObject to log blacklisted requests to */

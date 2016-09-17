@@ -39,61 +39,71 @@
 #include "atscppapi/Transaction.h"
 #include "atscppapi/InterceptPlugin.h"
 
-namespace atscppapi {
+namespace atscppapi
+{
+namespace utils
+{
+  /**
+   * @private
+   */
+  class internal
+  {
+  public:
+    static TSHttpHookID convertInternalHookToTsHook(Plugin::HookType);
+    static TSHttpHookID convertInternalTransformationTypeToTsHook(TransformationPlugin::Type type);
+    static void invokePluginForEvent(TransactionPlugin *, TSHttpTxn, TSEvent);
+    static void invokePluginForEvent(GlobalPlugin *, TSHttpTxn, TSEvent);
+    static HttpVersion getHttpVersion(TSMBuffer hdr_buf, TSMLoc hdr_loc);
+    static void initTransactionManagement();
+    static std::string consumeFromTSIOBufferReader(TSIOBufferReader);
+    static std::shared_ptr<Mutex> getTransactionPluginMutex(TransactionPlugin &);
+    static Transaction &getTransaction(TSHttpTxn);
 
-namespace utils {
+    static AsyncHttpFetchState *
+    getAsyncHttpFetchState(AsyncHttpFetch &async_http_fetch)
+    {
+      return async_http_fetch.state_;
+    }
 
-/**
- * @private
- */
-class internal {
-public:
-  static TSHttpHookID convertInternalHookToTsHook(Plugin::HookType);
-  static TSHttpHookID convertInternalTransformationTypeToTsHook(TransformationPlugin::Type type);
-  static void invokePluginForEvent(TransactionPlugin *, TSHttpTxn, TSEvent);
-  static void invokePluginForEvent(GlobalPlugin *, TSHttpTxn, TSEvent);
-  static HttpVersion getHttpVersion(TSMBuffer hdr_buf, TSMLoc hdr_loc);
-  static void initTransactionManagement();
-  static std::string consumeFromTSIOBufferReader(TSIOBufferReader);
-  static shared_ptr<Mutex> getTransactionPluginMutex(TransactionPlugin &);
-  static Transaction &getTransaction(TSHttpTxn);
+    static void
+    setTransactionEvent(Transaction &transaction, TSEvent event)
+    {
+      transaction.setEvent(event);
+    }
 
-  static AsyncHttpFetchState *getAsyncHttpFetchState(AsyncHttpFetch &async_http_fetch) {
-    return async_http_fetch.state_;
-  }
+    static void
+    resetTransactionHandles(Transaction &transaction)
+    {
+      transaction.resetHandles();
+    }
 
-  static void initResponse(Response &response, TSMBuffer hdr_buf, TSMLoc hdr_loc) {
-    response.init(hdr_buf, hdr_loc);
-  }
+    static void
+    initResponse(Response &response, TSMBuffer hdr_buf, TSMLoc hdr_loc)
+    {
+      response.init(hdr_buf, hdr_loc);
+    }
 
-  static void initTransactionServerRequest(Transaction &transaction) {
-    transaction.initServerRequest();
-  }
+    static const std::list<TransactionPlugin *> &
+    getTransactionPlugins(const Transaction &transaction)
+    {
+      return transaction.getPlugins();
+    }
 
-  static void initTransactionServerResponse(Transaction &transaction) {
-    transaction.initServerResponse();
-  }
+    static void
+    dispatchInterceptEvent(InterceptPlugin *plugin, TSEvent event, void *edata)
+    {
+      plugin->handleEvent(static_cast<int>(event), edata);
+    }
 
-  static void initTransactionClientResponse(Transaction &transaction) {
-    transaction.initClientResponse();
-  }
+    static void
+    deleteAsyncHttpFetch(AsyncHttpFetch *fetch)
+    {
+      delete fetch;
+    }
 
-  static const std::list<TransactionPlugin *> &getTransactionPlugins(const Transaction &transaction) {
-    return transaction.getPlugins();
-  }
-
-  static void dispatchInterceptEvent(InterceptPlugin *plugin, TSEvent event, void *edata) {
-    plugin->handleEvent(static_cast<int>(event), edata);
-  }
-
-  static void deleteAsyncHttpFetch(AsyncHttpFetch *fetch) {
-    delete fetch;
-  }
-
-}; /* internal */
+  }; /* internal */
 
 } /* utils */
-
 }
 
 #endif /* ATSCPPAPI_ATSUTILS_H_ */

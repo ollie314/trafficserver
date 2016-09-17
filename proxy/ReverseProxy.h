@@ -35,14 +35,14 @@
 
 #include "P_RecProcess.h"
 
-#include "ink_hash_table.h"
-#include "ink_defs.h"
+#include "ts/ink_hash_table.h"
+#include "ts/ink_defs.h"
 #include "HttpTransact.h"
 #include "RemapPluginInfo.h"
 #include "UrlRewrite.h"
 #include "UrlMapping.h"
 
-#define EMPTY_PORT_MAPPING (int32_t)~0
+#define EMPTY_PORT_MAPPING (int32_t) ~0
 
 class url_mapping;
 struct host_hdr_info;
@@ -65,7 +65,7 @@ mapping_type request_url_remap_redirect(HTTPHdr *request_header, URL *redirect_u
 bool response_url_remap(HTTPHdr *response_header);
 
 // Reload Functions
-void reloadUrlRewrite();
+bool reloadUrlRewrite();
 
 int url_rewrite_CB(const char *name, RecDataT data_type, RecData data, void *cookie);
 

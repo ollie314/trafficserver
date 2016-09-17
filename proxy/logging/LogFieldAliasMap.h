@@ -26,17 +26,16 @@
   easily remembered names can be used to refer to log fields of integer type.
  */
 
-
 #ifndef LOG_FIELD_ALIAS_MAP_H
 #define LOG_FIELD_ALIAS_MAP_H
 
 #include <stdarg.h>
 #include <string.h>
 
-#include "libts.h"
-#include "Ptr.h"
+#include "ts/ink_platform.h"
+#include "ts/Ptr.h"
 #include "LogUtils.h"
-#include "ink_string.h"
+#include "ts/ink_string.h"
 
 /*****************************************************************************
 
@@ -71,11 +70,9 @@ any memory the map may have allocated.
 
  *****************************************************************************/
 
-
-class LogFieldAliasMap:public RefCountObj
+class LogFieldAliasMap : public RefCountObj
 {
 public:
-
   // the logging system assumes log entries of type sINT are
   // unsigned (signed?) integers (int64_t type) so we define IntType
   // to be unsigned (signed?)
@@ -83,11 +80,15 @@ public:
   // vararg. To make that work, we must use the "generic" int.
 
   typedef int64_t IntType;
-  enum
-  { ALL_OK = 0, INVALID_INT, INVALID_STRING, BUFFER_TOO_SMALL };
+  enum {
+    ALL_OK = 0,
+    INVALID_INT,
+    INVALID_STRING,
+    BUFFER_TOO_SMALL,
+  };
 
-  virtual int asInt(char *key, IntType * val, bool case_sensitive = 0) const = 0;
-  virtual int asString(IntType key, char *buf, size_t bufLen, size_t * numChars = 0) const = 0;
+  virtual int asInt(char *key, IntType *val, bool case_sensitive = 0) const = 0;
+  virtual int asString(IntType key, char *buf, size_t bufLen, size_t *numChars = 0) const = 0;
 };
 
 /*****************************************************************************
@@ -102,56 +103,51 @@ table->init(3, 1, "one", 2, "two", 7, "seven")
 
  *****************************************************************************/
 
-struct LogFieldAliasTableEntry
-{
-  bool valid;                   // entry in table is valid
-  char *name;                   // the string equivalent
-  size_t length;                // the length of the string
+struct LogFieldAliasTableEntry {
+  bool valid;    // entry in table is valid
+  char *name;    // the string equivalent
+  size_t length; // the length of the string
 
-  LogFieldAliasTableEntry()
-    : valid(false), name(NULL), length(0)
-  { }
+  LogFieldAliasTableEntry() : valid(false), name(NULL), length(0) {}
+  ~LogFieldAliasTableEntry()
+  {
+    if (name) {
+      free(name);
+    }
+  }
 };
 
-class LogFieldAliasTable:public LogFieldAliasMap
+class LogFieldAliasTable : public LogFieldAliasMap
 {
 private:
-  IntType m_min;                 // minimum numeric value
-  IntType  m_max;                 // maximum numeric value
-  IntType m_entries;             // number of entries in table
-  LogFieldAliasTableEntry *m_table;     // array of table entries
+  IntType m_min;                    // minimum numeric value
+  IntType m_max;                    // maximum numeric value
+  IntType m_entries;                // number of entries in table
+  LogFieldAliasTableEntry *m_table; // array of table entries
 
 public:
-  LogFieldAliasTable()
-    : m_min(0), m_max(0), m_entries(0), m_table(0)
-  { }
-
-  ~LogFieldAliasTable() {
-    delete[]m_table;
-  }
-
+  LogFieldAliasTable() : m_min(0), m_max(0), m_entries(0), m_table(0) {}
+  ~LogFieldAliasTable() { delete[] m_table; }
   void init(size_t numPairs, ...);
 
-  int asInt(char *key, IntType * val, bool case_sensitive) const
+  int
+  asInt(char *key, IntType *val, bool case_sensitive) const
   {
     int retVal = INVALID_STRING;
 
-    for (IntType i = 0; i < m_entries; i++)
-    {
+    for (IntType i = 0; i < m_entries; i++) {
       bool found;
-      if (m_table[i].valid)
-      {
+      if (m_table[i].valid) {
         if (case_sensitive) {
           found = (strcmp(key, m_table[i].name) == 0);
-        } else
-        {
+        } else {
           found = (strcasecmp(key, m_table[i].name) == 0);
         }
       } else {
         found = false;
       }
       if (found) {
-        *val = (unsigned int) (i + m_min);
+        *val   = (unsigned int)(i + m_min);
         retVal = ALL_OK;
         break;
       }
@@ -160,28 +156,26 @@ public:
     return retVal;
   }
 
-  int asString(IntType key, char *buf, size_t bufLen, size_t * numCharsPtr = 0) const
+  int
+  asString(IntType key, char *buf, size_t bufLen, size_t *numCharsPtr = 0) const
   {
     int retVal;
     size_t numChars;
 
     size_t i = key - m_min;
-    if (m_entries && key >= m_min && key <= m_max && m_table[i].valid)
-    {
+    if (m_entries && key >= m_min && key <= m_max && m_table[i].valid) {
       size_t l = m_table[i].length;
-      if (l < bufLen)
-      {
+      if (l < bufLen) {
         ink_strlcpy(buf, m_table[key - m_min].name, bufLen);
         numChars = l;
-        retVal = ALL_OK;
-      } else
-      {
+        retVal   = ALL_OK;
+      } else {
         numChars = 0;
-        retVal = BUFFER_TOO_SMALL;
+        retVal   = BUFFER_TOO_SMALL;
       }
     } else {
       numChars = 0;
-      retVal = INVALID_INT;
+      retVal   = INVALID_INT;
     }
     if (numCharsPtr) {
       *numCharsPtr = numChars;
@@ -197,29 +191,28 @@ from their integer value to the "hex" notation and back.
 
  *****************************************************************************/
 
-class LogFieldAliasTimeHex:public LogFieldAliasMap
+class LogFieldAliasTimeHex : public LogFieldAliasMap
 {
 public:
-  int asInt(char *str, IntType * time, bool /* case_sensitive ATS_UNUSED */) const
+  int
+  asInt(char *str, IntType *time, bool /* case_sensitive ATS_UNUSED */) const
   {
     unsigned long a;
     // coverity[secure_coding]
-    if (sscanf(str, "%lx", (unsigned long *) &a) == 1) {
-      *time = (IntType) a;
+    if (sscanf(str, "%lx", (unsigned long *)&a) == 1) {
+      *time = (IntType)a;
       return ALL_OK;
-    } else
-    {
+    } else {
       return INVALID_STRING;
     }
   }
 
-  int asString(IntType time, char *buf, size_t bufLen, size_t * numCharsPtr = 0) const
+  int
+  asString(IntType time, char *buf, size_t bufLen, size_t *numCharsPtr = 0) const
   {
     return (LogUtils::timestamp_to_hex_str(time, buf, bufLen, numCharsPtr) ? BUFFER_TOO_SMALL : ALL_OK);
   }
 };
 
-
-
-//LOG_FIELD_ALIAS_MAP_H
+// LOG_FIELD_ALIAS_MAP_H
 #endif

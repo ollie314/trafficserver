@@ -37,25 +37,24 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 
-#include "ink_defs.h"
+#include "ts/ink_defs.h"
 
 #if defined(TCP_INFO) && defined(HAVE_STRUCT_TCP_INFO)
 #define TCPI_PLUGIN_SUPPORTED 1
 #endif
 
-#define TCPI_HOOK_SSN_START     0x01u
-#define TCPI_HOOK_TXN_START     0x02u
+#define TCPI_HOOK_SSN_START 0x01u
+#define TCPI_HOOK_TXN_START 0x02u
 #define TCPI_HOOK_SEND_RESPONSE 0x04u
-#define TCPI_HOOK_SSN_CLOSE     0x08u
-#define TCPI_HOOK_TXN_CLOSE     0x10u
+#define TCPI_HOOK_SSN_CLOSE 0x08u
+#define TCPI_HOOK_TXN_CLOSE 0x10u
 
 // Log format headers. These are emitted once at the start of a log file. Note that we
 // carefully order the fields so the field ordering is compatible. This lets you change
 // the verbosity without breaking a perser that is moderately robust.
-static const char * tcpi_headers[] = {
-  "timestamp event client server rtt",
-  "timestamp event client server rtt rttvar last_sent last_recv "
-    "snd_ssthresh rcv_ssthresh unacked sacked lost retrans fackets",
+static const char *tcpi_headers[] = {
+  "timestamp event client server rtt", "timestamp event client server rtt rttvar last_sent last_recv "
+                                       "snd_ssthresh rcv_ssthresh unacked sacked lost retrans fackets",
 };
 
 struct Config {
@@ -63,10 +62,9 @@ struct Config {
   unsigned log_level;
   TSTextLogObject log;
 
-  Config() : sample(1000), log_level(1), log(NULL) {
-  }
-
-  ~Config() {
+  Config() : sample(1000), log_level(1), log(NULL) {}
+  ~Config()
+  {
     if (log) {
       TSTextLogObjectDestroy(log);
     }
@@ -74,38 +72,46 @@ struct Config {
 };
 
 union const_sockaddr_ptr {
-  const struct sockaddr * sa;
-  const struct sockaddr_in * in;
-  const struct sockaddr_in6 * in6;
+  const struct sockaddr *sa;
+  const struct sockaddr_in *in;
+  const struct sockaddr_in6 *in6;
 
-  const void * addr() const {
+  const void *
+  addr() const
+  {
     switch (sa->sa_family) {
-    case AF_INET: return &(in->sin_addr);
-    case AF_INET6: return &(in6->sin6_addr);
-    default: return NULL;
+    case AF_INET:
+      return &(in->sin_addr);
+    case AF_INET6:
+      return &(in6->sin6_addr);
+    default:
+      return NULL;
     }
   }
-
 };
 
 #if TCPI_PLUGIN_SUPPORTED
 
 static void
-log_tcp_info(Config * config, const char * event_name, TSHttpSsn ssnp)
+log_tcp_info(Config *config, const char *event_name, TSHttpSsn ssnp)
 {
-  char                client_str[INET6_ADDRSTRLEN];
-  char                server_str[INET6_ADDRSTRLEN];
-  const_sockaddr_ptr  client_addr;
-  const_sockaddr_ptr  server_addr;
+  char client_str[INET6_ADDRSTRLEN];
+  char server_str[INET6_ADDRSTRLEN];
+  const_sockaddr_ptr client_addr;
+  const_sockaddr_ptr server_addr;
 
-  struct tcp_info     info;
-  socklen_t           tcp_info_len = sizeof(info);
-  int                 fd;
+  struct tcp_info info;
+  socklen_t tcp_info_len = sizeof(info);
+  int fd;
 
   TSReleaseAssert(config->log != NULL);
 
-  if (TSHttpSsnClientFdGet(ssnp, &fd) != TS_SUCCESS) {
-    TSDebug("tcpinfo", "error getting the client socket fd");
+  if (ssnp != NULL && (TSHttpSsnClientFdGet(ssnp, &fd) != TS_SUCCESS || fd <= 0)) {
+    TSDebug("tcpinfo", "error getting the client socket fd from ssn");
+    return;
+  }
+  if (ssnp == NULL) {
+    TSDebug("tcpinfo", "ssn is not specified");
     return;
   }
 
@@ -129,51 +135,23 @@ log_tcp_info(Config * config, const char * event_name, TSHttpSsn ssnp)
 
   if (config->log_level == 2) {
 #if !defined(freebsd) || defined(__GLIBC__)
-    ret = TSTextLogObjectWrite(config->log, "%s %s %s %u %u %u %u %u %u %u %u %u %u %u %u",
-                     event_name,
-                     client_str,
-                     server_str,
-                     info.tcpi_rtt,
-                     info.tcpi_rttvar,
-                     info.tcpi_last_data_sent,
-                     info.tcpi_last_data_recv,
-                     info.tcpi_snd_cwnd,
-                     info.tcpi_snd_ssthresh,
-                     info.tcpi_rcv_ssthresh,
-                     info.tcpi_unacked,
-                     info.tcpi_sacked,
-                     info.tcpi_lost,
-                     info.tcpi_retrans,
-                     info.tcpi_fackets);
+    ret = TSTextLogObjectWrite(config->log, "%s %s %s %u %u %u %u %u %u %u %u %u %u %u %u", event_name, client_str, server_str,
+                               info.tcpi_rtt, info.tcpi_rttvar, info.tcpi_last_data_sent, info.tcpi_last_data_recv,
+                               info.tcpi_snd_cwnd, info.tcpi_snd_ssthresh, info.tcpi_rcv_ssthresh, info.tcpi_unacked,
+                               info.tcpi_sacked, info.tcpi_lost, info.tcpi_retrans, info.tcpi_fackets);
 #else
-    ret = TSTextLogObjectWrite(config->log, "%s %s %s %u %u %u %u %u %u %u %u %u %u %u %u",
-                     event_name,
-                     client_str,
-                     server_str,
-                     info.tcpi_rtt,
-                     info.tcpi_rttvar,
-                     info.__tcpi_last_data_sent,
-                     info.tcpi_last_data_recv,
-                     info.tcpi_snd_cwnd,
-                     info.tcpi_snd_ssthresh,
-                     info.__tcpi_rcv_ssthresh,
-                     info.__tcpi_unacked,
-                     info.__tcpi_sacked,
-                     info.__tcpi_lost,
-                     info.__tcpi_retrans,
-                     info.__tcpi_fackets);
+    ret = TSTextLogObjectWrite(config->log, "%s %s %s %u %u %u %u %u %u %u %u %u %u %u %u", event_name, client_str, server_str,
+                               info.tcpi_rtt, info.tcpi_rttvar, info.__tcpi_last_data_sent, info.tcpi_last_data_recv,
+                               info.tcpi_snd_cwnd, info.tcpi_snd_ssthresh, info.__tcpi_rcv_ssthresh, info.__tcpi_unacked,
+                               info.__tcpi_sacked, info.__tcpi_lost, info.__tcpi_retrans, info.__tcpi_fackets);
 #endif
   } else {
-    ret = TSTextLogObjectWrite(config->log, "%s %s %s %u",
-                     event_name,
-                     client_str,
-                     server_str,
-                     info.tcpi_rtt);
+    ret = TSTextLogObjectWrite(config->log, "%s %s %s %u", event_name, client_str, server_str, info.tcpi_rtt);
   }
 
   if (ret != TS_SUCCESS) {
-      // ToDo: This could be due to a failure, or logs full. Should we consider
-      // closing / reopening the log? If so, how often do we do that ?
+    // ToDo: This could be due to a failure, or logs full. Should we consider
+    // closing / reopening the log? If so, how often do we do that ?
   }
 }
 
@@ -192,47 +170,46 @@ tcp_info_hook(TSCont contp, TSEvent event, void *edata)
 {
   TSHttpSsn ssnp = NULL;
   TSHttpTxn txnp = NULL;
-  int       random = 0;
-  Config *  config = (Config *)TSContDataGet(contp);
+  int random     = 0;
+  Config *config = (Config *)TSContDataGet(contp);
 
   const char *event_name;
   switch (event) {
   case TS_EVENT_HTTP_SSN_START:
-    ssnp = (TSHttpSsn)edata;
+    ssnp       = (TSHttpSsn)edata;
     event_name = "ssn_start";
     break;
   case TS_EVENT_HTTP_TXN_START:
-    txnp = (TSHttpTxn)edata;
-    ssnp = TSHttpTxnSsnGet(txnp);
+    txnp       = (TSHttpTxn)edata;
+    ssnp       = TSHttpTxnSsnGet(txnp);
     event_name = "txn_start";
     break;
   case TS_EVENT_HTTP_TXN_CLOSE:
-    txnp = (TSHttpTxn)edata;
-    ssnp = TSHttpTxnSsnGet(txnp);
+    txnp       = (TSHttpTxn)edata;
+    ssnp       = TSHttpTxnSsnGet(txnp);
     event_name = "txn_close";
     break;
   case TS_EVENT_HTTP_SEND_RESPONSE_HDR:
-    txnp = (TSHttpTxn)edata;
-    ssnp = TSHttpTxnSsnGet(txnp);
+    txnp       = (TSHttpTxn)edata;
+    ssnp       = TSHttpTxnSsnGet(txnp);
     event_name = "send_resp_hdr";
     break;
   case TS_EVENT_HTTP_SSN_CLOSE:
-    ssnp = (TSHttpSsn)edata;
+    ssnp       = (TSHttpSsn)edata;
     event_name = "ssn_close";
     break;
   default:
     return 0;
   }
 
-  TSDebug("tcpinfo", "logging hook called for %s (%s) with log object %p",
-      TSHttpEventNameLookup(event), event_name, config->log);
+  TSDebug("tcpinfo", "logging hook called for %s (%s) with log object %p", TSHttpEventNameLookup(event), event_name, config->log);
 
   if (config->log == NULL) {
     goto done;
   }
 
   // Don't try to sample internal requests. TCP metrics for loopback are not interesting.
-  if (TSHttpIsInternalSession(ssnp) == TS_SUCCESS) {
+  if (TSHttpSsnIsInternal(ssnp)) {
     goto done;
   }
 
@@ -259,9 +236,9 @@ done:
 }
 
 static bool
-parse_unsigned(const char * str, unsigned long& lval)
+parse_unsigned(const char *str, unsigned long &lval)
 {
-  char * end = NULL;
+  char *end = NULL;
 
   if (*str == '\0') {
     return false;
@@ -283,28 +260,25 @@ parse_unsigned(const char * str, unsigned long& lval)
 
 // Parse a comma-separated list of hook names into a hook bitmask.
 static unsigned
-parse_hook_list(const char * hook_list)
+parse_hook_list(const char *hook_list)
 {
   unsigned mask = 0;
-  char * tok;
-  char * str;
-  char * last;
+  char *tok;
+  char *str;
+  char *last;
 
-  const struct hookmask { const char * name; unsigned mask; } hooks[] = {
-    { "ssn_start", TCPI_HOOK_SSN_START },
-    { "txn_start", TCPI_HOOK_TXN_START },
-    { "send_resp_hdr", TCPI_HOOK_SEND_RESPONSE },
-    { "ssn_close", TCPI_HOOK_SSN_CLOSE },
-    { "txn_close", TCPI_HOOK_TXN_CLOSE },
-    { NULL, 0u }
-  };
+  const struct hookmask {
+    const char *name;
+    unsigned mask;
+  } hooks[] = {{"ssn_start", TCPI_HOOK_SSN_START}, {"txn_start", TCPI_HOOK_TXN_START}, {"send_resp_hdr", TCPI_HOOK_SEND_RESPONSE},
+               {"ssn_close", TCPI_HOOK_SSN_CLOSE}, {"txn_close", TCPI_HOOK_TXN_CLOSE}, {NULL, 0u}};
 
   str = TSstrdup(hook_list);
 
   for (tok = strtok_r(str, ",", &last); tok; tok = strtok_r(NULL, ",", &last)) {
     bool match = false;
 
-    for (const struct hookmask * m = hooks; m->name != NULL; ++m) {
+    for (const struct hookmask *m = hooks; m->name != NULL; ++m) {
       if (strcmp(m->name, tok) == 0) {
         mask |= m->mask;
         match = true;
@@ -322,36 +296,35 @@ parse_hook_list(const char * hook_list)
 }
 
 void
-TSPluginInit(int argc, const char * argv[])
+TSPluginInit(int argc, const char *argv[])
 {
-  static const char usage[] = "tcpinfo.so [--log-file=PATH] [--log-level=LEVEL] [--hooks=LIST] [--sample-rate=COUNT]";
+  static const char usage[]             = "tcpinfo.so [--log-file=PATH] [--log-level=LEVEL] [--hooks=LIST] [--sample-rate=COUNT]";
   static const struct option longopts[] = {
-    { const_cast<char *>("sample-rate"), required_argument, NULL, 'r' },
-    { const_cast<char *>("log-file"), required_argument, NULL, 'f' },
-    { const_cast<char *>("log-level"), required_argument, NULL, 'l' },
-    { const_cast<char *>("hooks"), required_argument, NULL, 'h' },
-    { NULL, 0, NULL, 0 }
+    {const_cast<char *>("sample-rate"), required_argument, NULL, 'r'},
+    {const_cast<char *>("log-file"), required_argument, NULL, 'f'},
+    {const_cast<char *>("log-level"), required_argument, NULL, 'l'},
+    {const_cast<char *>("hooks"), required_argument, NULL, 'h'},
+    {NULL, 0, NULL, 0},
   };
 
   TSPluginRegistrationInfo info;
-  Config *  config = new Config();
-  const char *  filename = "tcpinfo";
-  TSCont    cont;
-  unsigned  hooks = 0;
+  Config *config       = new Config();
+  const char *filename = "tcpinfo";
+  TSCont cont;
+  unsigned hooks = 0;
 
-  info.plugin_name = (char*)"tcpinfo";
-  info.vendor_name = (char*)"Apache Software Foundation";
-  info.support_email = (char*)"dev@trafficserver.apache.org";
+  info.plugin_name   = (char *)"tcpinfo";
+  info.vendor_name   = (char *)"Apache Software Foundation";
+  info.support_email = (char *)"dev@trafficserver.apache.org";
 
-  if (TSPluginRegister(TS_SDK_VERSION_3_0, &info) != TS_SUCCESS) {
+  if (TSPluginRegister(&info) != TS_SUCCESS) {
     TSError("[tcpinfo] plugin registration failed");
   }
 
-  optind = 0;
   for (;;) {
     unsigned long lval;
 
-    switch (getopt_long(argc, (char * const *)argv, "r:f:l:h:", longopts, NULL)) {
+    switch (getopt_long(argc, (char *const *)argv, "r:f:l:h:", longopts, NULL)) {
     case 'r':
       if (parse_unsigned(optarg, lval)) {
         config->sample = atoi(optarg);
@@ -373,9 +346,9 @@ TSPluginInit(int argc, const char * argv[])
       hooks = parse_hook_list(optarg);
       break;
     case -1:
-        goto init;
+      goto init;
     default:
-        TSError("[tcpinfo] usage: %s", usage);
+      TSError("[tcpinfo] usage: %s", usage);
     }
   }
 
@@ -425,5 +398,4 @@ init:
     TSHttpHookAdd(TS_HTTP_TXN_CLOSE_HOOK, cont);
     TSDebug("tcpinfo", "added hook to the close of the transaction");
   }
-
 }

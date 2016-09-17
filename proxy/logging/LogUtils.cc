@@ -21,7 +21,8 @@
   See the License for the specific language governing permissions and
   limitations under the License.
  */
-#include "ink_config.h"
+#include "ts/ink_config.h"
+#include "ts/ink_string.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -46,7 +47,6 @@
 #include "LogUtils.h"
 #include "LogLimits.h"
 
-
 /*-------------------------------------------------------------------------
   LogUtils::timestamp_to_str
 
@@ -64,7 +64,7 @@ LogUtils::timestamp_to_str(long timestamp, char *buf, int size)
   static const char *format_str = "%Y%m%d.%Hh%Mm%Ss";
   struct tm res;
   struct tm *tms;
-  tms = ink_localtime_r((const time_t *) &timestamp, &res);
+  tms = ink_localtime_r((const time_t *)&timestamp, &res);
   return strftime(buf, size, format_str, tms);
 }
 
@@ -82,10 +82,10 @@ LogUtils::timestamp_to_str(long timestamp, char *buf, int size)
 char *
 LogUtils::timestamp_to_netscape_str(long timestamp)
 {
-  static char timebuf[64];      // NOTE: not MT safe
+  static char timebuf[64]; // NOTE: not MT safe
   static char gmtstr[16];
   static long last_timestamp = 0;
-  static char bad_time[] = "Bad timestamp";
+  static char bad_time[]     = "Bad timestamp";
 
   // safety check
   if (timestamp < 0) {
@@ -102,17 +102,21 @@ LogUtils::timestamp_to_netscape_str(long timestamp)
     // taking daylight savings into account.
     //
     struct tm res;
-    struct tm *tms = ink_localtime_r((const time_t *) &timestamp, &res);
-    long zone = -tms->tm_gmtoff;        // double negative!
+    struct tm *tms = ink_localtime_r((const time_t *)&timestamp, &res);
+#if defined(solaris)
+    long zone = (tms->tm_isdst > 0) ? altzone : timezone;
+#else
+    long zone = -tms->tm_gmtoff; // double negative!
+#endif
     int offset;
     char sign;
 
     if (zone >= 0) {
       offset = zone / 60;
-      sign = '-';
+      sign   = '-';
     } else {
       offset = zone / -60;
-      sign = '+';
+      sign   = '+';
     }
     int glen = snprintf(gmtstr, 16, "%c%.2d%.2d", sign, offset / 60, offset % 60);
 
@@ -133,9 +137,9 @@ LogUtils::timestamp_to_netscape_str(long timestamp)
 char *
 LogUtils::timestamp_to_date_str(long timestamp)
 {
-  static char timebuf[64];      // NOTE: not MT safe
+  static char timebuf[64]; // NOTE: not MT safe
   static long last_timestamp = 0;
-  static char bad_time[] = "Bad timestamp";
+  static char bad_time[]     = "Bad timestamp";
 
   // safety check
   if (timestamp < 0) {
@@ -148,7 +152,7 @@ LogUtils::timestamp_to_date_str(long timestamp)
 
   if (timestamp != last_timestamp) {
     struct tm res;
-    struct tm *tms = ink_localtime_r((const time_t *) &timestamp, &res);
+    struct tm *tms = ink_localtime_r((const time_t *)&timestamp, &res);
     strftime(timebuf, 64, "%Y-%m-%d", tms);
     last_timestamp = timestamp;
   }
@@ -165,9 +169,9 @@ LogUtils::timestamp_to_date_str(long timestamp)
 char *
 LogUtils::timestamp_to_time_str(long timestamp)
 {
-  static char timebuf[64];      // NOTE: not MT safe
+  static char timebuf[64]; // NOTE: not MT safe
   static long last_timestamp = 0;
-  static char bad_time[] = "Bad timestamp";
+  static char bad_time[]     = "Bad timestamp";
 
   // safety check
   if (timestamp < 0) {
@@ -180,7 +184,7 @@ LogUtils::timestamp_to_time_str(long timestamp)
 
   if (timestamp != last_timestamp) {
     struct tm res;
-    struct tm *tms = ink_localtime_r((const time_t *) &timestamp, &res);
+    struct tm *tms = ink_localtime_r((const time_t *)&timestamp, &res);
     strftime(timebuf, 64, "%H:%M:%S", tms);
     last_timestamp = timestamp;
   }
@@ -240,7 +244,7 @@ void
 LogUtils::strip_trailing_newline(char *buf)
 {
   if (buf != NULL) {
-    int len =::strlen(buf);
+    int len = ::strlen(buf);
     if (len > 0) {
       if (buf[len - 1] == '\n') {
         buf[len - 1] = '\0';
@@ -250,16 +254,23 @@ LogUtils::strip_trailing_newline(char *buf)
 }
 
 /*-------------------------------------------------------------------------
-  LogUtils::escapify_url
+  LogUtils::escapify_url_common
 
   This routine will escapify a URL to remove spaces (and perhaps other ugly
   characters) from a URL and replace them with a hex escape sequence.
   Since the escapes are larger (multi-byte) than the characters being
   replaced, the string returned will be longer than the string passed.
+
+  This is a worker function called by escapify_url and pure_escapify_url.  These
+  functions differ on whether the function tries to detect and avoid
+  double URL encoding (escapify_url) or not (pure_escapify_url)
   -------------------------------------------------------------------------*/
 
+namespace
+{
 char *
-LogUtils::escapify_url(Arena *arena, char *url, size_t len_in, int *len_out, char *dst, size_t dst_size, const unsigned char *map)
+escapify_url_common(Arena *arena, char *url, size_t len_in, int *len_out, char *dst, size_t dst_size, const unsigned char *map,
+                    bool pure_escape)
 {
   // codes_to_escape is a bitmap encoding the codes that should be escaped.
   // These are all the codes defined in section 2.4.3 of RFC 2396
@@ -269,37 +280,40 @@ LogUtils::escapify_url(Arena *arena, char *url, size_t len_in, int *len_out, cha
   // Note that we leave codes beyond 127 unmodified.
   //
   static const unsigned char codes_to_escape[32] = {
-    0xFF, 0xFF, 0xFF, 0xFF,     // control
-    0xB4,                       // space " # %
-    0x00, 0x00,                 //
-    0x0A,                       // < >
-    0x00, 0x00, 0x00,           //
-    0x1E, 0x80,                 // [ \ ] ^ `
-    0x00, 0x00,                 //
-    0x1F,                       // { | } ~ DEL
-    0x00, 0x00, 0x00, 0x00,     // all non-ascii characters unmodified
-    0x00, 0x00, 0x00, 0x00,     //               .
-    0x00, 0x00, 0x00, 0x00,     //               .
-    0x00, 0x00, 0x00, 0x00      //               .
+    0xFF, 0xFF, 0xFF,
+    0xFF,             // control
+    0xB4,             // space " # %
+    0x00, 0x00,       //
+    0x0A,             // < >
+    0x00, 0x00, 0x00, //
+    0x1E, 0x80,       // [ \ ] ^ `
+    0x00, 0x00,       //
+    0x1F,             // { | } ~ DEL
+    0x00, 0x00, 0x00,
+    0x00, // all non-ascii characters unmodified
+    0x00, 0x00, 0x00,
+    0x00, //               .
+    0x00, 0x00, 0x00,
+    0x00, //               .
+    0x00, 0x00, 0x00,
+    0x00 //               .
   };
 
-  static char hex_digit[16] = {
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
-    'D', 'E', 'F'
-  };
+  static char hex_digit[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
   if (!url || (dst && dst_size < len_in)) {
     *len_out = 0;
     return NULL;
   }
 
-  if (!map)
+  if (!map) {
     map = codes_to_escape;
+  }
 
   // Count specials in the url, assuming that there won't be any.
   //
-  int count = 0;
-  char *p = url;
+  int count        = 0;
+  char *p          = url;
   char *in_url_end = url + len_in;
 
   while (p < in_url_end) {
@@ -314,8 +328,9 @@ LogUtils::escapify_url(Arena *arena, char *url, size_t len_in, int *len_out, cha
     // The common case, no escapes, so just return the source string.
     //
     *len_out = len_in;
-    if (dst)
+    if (dst) {
       ink_strlcpy(dst, url, dst_size);
+    }
     return url;
   }
 
@@ -339,17 +354,34 @@ LogUtils::escapify_url(Arena *arena, char *url, size_t len_in, int *len_out, cha
   //
   char *new_url;
 
-  if (dst)
+  if (dst) {
     new_url = dst;
-  else
-    new_url = (char *) arena->str_alloc(out_len + 1);
+  } else {
+    new_url = (char *)arena->str_alloc(out_len + 1);
+  }
 
   char *from = url;
-  char *to = new_url;
+  char *to   = new_url;
 
   while (from < in_url_end) {
     unsigned char c = *from;
     if (map[c / 8] & (1 << (7 - c % 8))) {
+      /*
+       * If two characters following a '%' don't need to be encoded, then it must
+       * mean that the three character sequence is already encoded.  Just copy it over.
+       */
+      if (!pure_escape && (*from == '%') && ((from + 2) < in_url_end)) {
+        unsigned char c1   = *(from + 1);
+        unsigned char c2   = *(from + 2);
+        bool needsEncoding = ((map[c1 / 8] & (1 << (7 - c1 % 8))) || (map[c2 / 8] & (1 << (7 - c2 % 8))));
+        if (!needsEncoding) {
+          out_len -= 2;
+          Debug("log-utils", "character already encoded..skipping %c, %c, %c", *from, *(from + 1), *(from + 2));
+          *to++ = *from++;
+          continue;
+        }
+      }
+
       *to++ = '%';
       *to++ = hex_digit[c / 16];
       *to++ = hex_digit[c % 16];
@@ -358,10 +390,24 @@ LogUtils::escapify_url(Arena *arena, char *url, size_t len_in, int *len_out, cha
     }
     from++;
   }
-  *to = '\0';                      // null terminate string
+  *to = '\0'; // null terminate string
 
   *len_out = out_len;
   return new_url;
+}
+}
+
+char *
+LogUtils::escapify_url(Arena *arena, char *url, size_t len_in, int *len_out, char *dst, size_t dst_size, const unsigned char *map)
+{
+  return escapify_url_common(arena, url, len_in, len_out, dst, dst_size, map, false);
+}
+
+char *
+LogUtils::pure_escapify_url(Arena *arena, char *url, size_t len_in, int *len_out, char *dst, size_t dst_size,
+                            const unsigned char *map)
+{
+  return escapify_url_common(arena, url, len_in, len_out, dst, dst_size, map, true);
 }
 
 /*-------------------------------------------------------------------------
@@ -382,12 +428,11 @@ LogUtils::remove_content_type_attributes(char *type_str, int *type_len)
   }
   // Look for a semicolon and cut out everything after that
   //
-  char *p = (char *) memchr(type_str, ';', *type_len);
+  char *p = (char *)memchr(type_str, ';', *type_len);
   if (p) {
     *type_len = p - type_str;
   }
 }
-
 
 /*-------------------------------------------------------------------------
   LogUtils::timestamp_to_hex_str
@@ -403,21 +448,22 @@ LogUtils::remove_content_type_attributes(char *type_str, int *type_len)
   -------------------------------------------------------------------------*/
 
 int
-LogUtils::timestamp_to_hex_str(unsigned ip, char *buf, size_t bufLen, size_t * numCharsPtr)
+LogUtils::timestamp_to_hex_str(unsigned ip, char *buf, size_t bufLen, size_t *numCharsPtr)
 {
   static const char *table = "0123456789abcdef@";
-  int retVal = 1;
-  int shift = 28;
+  int retVal               = 1;
+  int shift                = 28;
   if (buf && bufLen > 0) {
-    if (bufLen > 8)
+    if (bufLen > 8) {
       bufLen = 8;
-    for (retVal = 0; retVal < (int) bufLen;) {
-      buf[retVal++] = (char) table[((ip >> shift) & 0xf)];
+    }
+    for (retVal = 0; retVal < (int)bufLen;) {
+      buf[retVal++] = (char)table[((ip >> shift) & 0xf)];
       shift -= 4;
     }
 
     if (numCharsPtr) {
-      *numCharsPtr = (size_t) retVal;
+      *numCharsPtr = (size_t)retVal;
     }
     retVal = (retVal == 8) ? 0 : 1;
   }
@@ -429,10 +475,10 @@ int
 LogUtils::ip_to_str (unsigned ip, char *str, unsigned len)
 {
     int ret = snprintf (str, len, "%u.%u.%u.%u",
-			    (ip >> 24) & 0xff,
-			    (ip >> 16) & 0xff,
-			    (ip >> 8)  & 0xff,
-			    ip         & 0xff);
+                            (ip >> 24) & 0xff,
+                            (ip >> 16) & 0xff,
+                            (ip >> 8)  & 0xff,
+                            ip         & 0xff);
 
     return ((ret <= (int)len)? ret : (int)len);
 }
@@ -445,12 +491,11 @@ int
 LogUtils::seconds_to_next_roll(time_t time_now, int rolling_offset, int rolling_interval)
 {
   struct tm lt;
-  ink_localtime_r((const time_t *) &time_now, &lt);
+  ink_localtime_r((const time_t *)&time_now, &lt);
   int sidl = lt.tm_sec + lt.tm_min * 60 + lt.tm_hour * 3600;
-  int tr = rolling_offset * 3600;
+  int tr   = rolling_offset * 3600;
   return ((tr >= sidl ? (tr - sidl) % rolling_interval : (86400 - (sidl - tr)) % rolling_interval));
 }
-
 
 // Checks if the file pointed to by full_filename either is a regular
 // file or a pipe and has write permission, or, if the file does not
@@ -472,8 +517,7 @@ LogUtils::seconds_to_next_roll(time_t time_now, int rolling_offset, int rolling_
 //    nor a pipe
 //
 int
-LogUtils::file_is_writeable(const char *full_filename,
-                            off_t * size_bytes, bool * has_size_limit, uint64_t * current_size_limit_bytes)
+LogUtils::file_is_writeable(const char *full_filename, off_t *size_bytes, bool *has_size_limit, uint64_t *current_size_limit_bytes)
 {
   int ret_val = 0;
   int e;
@@ -487,11 +531,12 @@ LogUtils::file_is_writeable(const char *full_filename,
     if (!(S_ISREG(stat_data.st_mode) || S_ISFIFO(stat_data.st_mode))) {
       ret_val = 1;
     } else if (!(stat_data.st_mode & S_IWUSR)) {
-      errno = EACCES;
+      errno   = EACCES;
       ret_val = -1;
     }
-    if (size_bytes)
+    if (size_bytes) {
       *size_bytes = stat_data.st_size;
+    }
   } else {
     // stat failed
     //
@@ -512,12 +557,12 @@ LogUtils::file_is_writeable(const char *full_filename,
       const char *slash = strrchr(full_filename, '/');
       if (slash) {
         size_t prefix_len = slash - full_filename + 1;
-        prefix = new char[prefix_len + 1];
+        prefix            = new char[prefix_len + 1];
         memcpy(prefix, full_filename, prefix_len);
         prefix[prefix_len] = 0;
-        dir = prefix;
+        dir                = prefix;
       } else {
-        dir = (char *) ".";     // full_filename has no prefix, use .
+        dir = (char *)"."; // full_filename has no prefix, use .
       }
 
       // check if directory is executable and writeable
@@ -526,12 +571,13 @@ LogUtils::file_is_writeable(const char *full_filename,
       if (e < 0) {
         ret_val = -1;
       } else {
-        if (size_bytes)
+        if (size_bytes) {
           *size_bytes = 0;
+        }
       }
 
       if (prefix) {
-        delete[]prefix;
+        delete[] prefix;
       }
     }
   }
@@ -545,13 +591,16 @@ LogUtils::file_is_writeable(const char *full_filename,
       ret_val = -1;
     } else {
       if (limit_data.rlim_cur != (rlim_t)RLIM_INFINITY) {
-        if (has_size_limit)
+        if (has_size_limit) {
           *has_size_limit = true;
-        if (current_size_limit_bytes)
+        }
+        if (current_size_limit_bytes) {
           *current_size_limit_bytes = limit_data.rlim_cur;
+        }
       } else {
-        if (has_size_limit)
+        if (has_size_limit) {
           *has_size_limit = false;
+        }
       }
     }
   }

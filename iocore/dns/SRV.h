@@ -24,16 +24,15 @@
 #ifndef _SRV_h_
 #define _SRV_h_
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "I_HostDBProcessor.h"
 
 struct HostDBInfo;
 
-#define HOST_DB_MAX_ROUND_ROBIN_INFO  16
-#define RAND_INV_RANGE(r) ((int) ((RAND_MAX + 1) / (r)))
+#define HOST_DB_MAX_ROUND_ROBIN_INFO 16
+#define RAND_INV_RANGE(r) ((int)((RAND_MAX + 1) / (r)))
 
-struct SRV
-{
+struct SRV {
   unsigned int weight;
   unsigned int port;
   unsigned int priority;
@@ -42,10 +41,7 @@ struct SRV
   unsigned int key;
   char host[MAXDNAME];
 
-  SRV():weight(0), port(0), priority(0), ttl(0), host_len(0), key(0)
-  {
-    host[0] = '\0';
-  }
+  SRV() : weight(0), port(0), priority(0), ttl(0), host_len(0), key(0) { host[0] = '\0'; }
 };
 
 inline bool
@@ -55,20 +51,13 @@ operator<(const SRV &left, const SRV &right)
   return (left.priority == right.priority) ? (left.key < right.key) : (left.priority < right.priority);
 }
 
-
-struct SRVHosts
-{
+struct SRVHosts {
   unsigned srv_host_count;
   unsigned srv_hosts_length;
   SRV hosts[HOST_DB_MAX_ROUND_ROBIN_INFO];
 
-  ~SRVHosts()
-  {
-  }
-
-  SRVHosts():srv_host_count(0), srv_hosts_length(0)
-  {
-  }
+  ~SRVHosts() {}
+  SRVHosts() : srv_host_count(0), srv_hosts_length(0) {}
 };
 
 #endif

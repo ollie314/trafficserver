@@ -26,13 +26,13 @@
 ClassAllocator<RemapPlugins> pluginAllocator("RemapPluginsAlloc");
 
 TSRemapStatus
-RemapPlugins::run_plugin(remap_plugin_info* plugin)
+RemapPlugins::run_plugin(remap_plugin_info *plugin)
 {
   TSRemapStatus plugin_retcode;
   TSRemapRequestInfo rri;
   url_mapping *map = _s->url_map.getMapping();
-  URL * map_from = _s->url_map.getFromURL();
-  URL * map_to = _s->url_map.getToURL();
+  URL *map_from    = _s->url_map.getFromURL();
+  URL *map_to      = _s->url_map.getToURL();
 
   // This is the equivalent of TSHttpTxnClientReqGet(), which every remap plugin would
   // have to call.
@@ -41,15 +41,15 @@ RemapPlugins::run_plugin(remap_plugin_info* plugin)
 
   // Read-only URL's (TSMLoc's to the SDK)
   rri.mapFromUrl = reinterpret_cast<TSMLoc>(map_from->m_url_impl);
-  rri.mapToUrl = reinterpret_cast<TSMLoc>(map_to->m_url_impl);
+  rri.mapToUrl   = reinterpret_cast<TSMLoc>(map_to->m_url_impl);
   rri.requestUrl = reinterpret_cast<TSMLoc>(_request_url->m_url_impl);
 
   rri.redirect = 0;
 
-  // These are made to reflect the "defaults" that will be used in
-  // the case where the plugins don't modify them. It's semi-weird
-  // that the "from" and "to" URLs changes when chaining happens, but
-  // it is necessary to get predictable behavior.
+// These are made to reflect the "defaults" that will be used in
+// the case where the plugins don't modify them. It's semi-weird
+// that the "from" and "to" URLs changes when chaining happens, but
+// it is necessary to get predictable behavior.
 #if 0
   if (_cur == 0) {
     rri.remap_from_host = map_from->host_get(&rri.remap_from_host_size);
@@ -64,22 +64,24 @@ RemapPlugins::run_plugin(remap_plugin_info* plugin)
   }
 #endif
 
-  void* ih = map->get_instance(_cur);
+  void *ih = map->get_instance(_cur);
 
   // Prepare State for the future
   if (_s && _cur == 0) {
     _s->fp_tsremap_os_response = plugin->fp_tsremap_os_response;
-    _s->remap_plugin_instance = ih;
+    _s->remap_plugin_instance  = ih;
   }
 
   plugin_retcode = plugin->fp_tsremap_do_remap(ih, _s ? reinterpret_cast<TSHttpTxn>(_s->state_machine) : NULL, &rri);
   // TODO: Deal with negative return codes here
-  if (plugin_retcode < 0)
+  if (plugin_retcode < 0) {
     plugin_retcode = TSREMAP_NO_REMAP;
+  }
 
   // First step after plugin remap must be "redirect url" check
-  if ((TSREMAP_DID_REMAP == plugin_retcode || TSREMAP_DID_REMAP_STOP == plugin_retcode) && rri.redirect)
+  if ((TSREMAP_DID_REMAP == plugin_retcode || TSREMAP_DID_REMAP_STOP == plugin_retcode) && rri.redirect) {
     _s->remap_redirect = _request_url->string_get(NULL);
+  }
 
   return plugin_retcode;
 }
@@ -96,13 +98,12 @@ RemapPlugins::run_plugin(remap_plugin_info* plugin)
 int
 RemapPlugins::run_single_remap()
 {
+  url_mapping *map             = _s->url_map.getMapping();
+  remap_plugin_info *plugin    = map->get_plugin(_cur); // get the nth plugin in our list of plugins
+  TSRemapStatus plugin_retcode = TSREMAP_NO_REMAP;
 
-  url_mapping *       map = _s->url_map.getMapping();
-  remap_plugin_info * plugin = map->get_plugin(_cur);    //get the nth plugin in our list of plugins
-  TSRemapStatus       plugin_retcode = TSREMAP_NO_REMAP;
-
-  Debug("url_rewrite", "running single remap rule id %d for the %d%s time",
-      map->map_id, _cur, _cur == 1 ? "st" : _cur == 2 ? "nd" : _cur == 3 ? "rd" : "th");
+  Debug("url_rewrite", "running single remap rule id %d for the %d%s time", map->map_id, _cur,
+        _cur == 1 ? "st" : _cur == 2 ? "nd" : _cur == 3 ? "rd" : "th");
 
   // There might not be a plugin if we are a regular non-plugin map rule. In that case, we will fall through
   // and do the default mapping and then stop.
@@ -130,8 +131,8 @@ RemapPlugins::run_single_remap()
   }
 
   if (TSREMAP_NO_REMAP_STOP == plugin_retcode || TSREMAP_DID_REMAP_STOP == plugin_retcode) {
-      Debug("url_rewrite", "breaking remap plugin chain since last plugin said we should stop");
-      return 1;
+    Debug("url_rewrite", "breaking remap plugin chain since last plugin said we should stop");
+    return 1;
   }
 
   if (_cur > MAX_REMAP_PLUGIN_CHAIN) {
@@ -150,7 +151,7 @@ RemapPlugins::run_single_remap()
 }
 
 int
-RemapPlugins::run_remap(int event, Event* e)
+RemapPlugins::run_remap(int event, Event *e)
 {
   Debug("url_rewrite", "Inside RemapPlugins::run_remap with cur = %d", _cur);
 
@@ -162,7 +163,7 @@ RemapPlugins::run_remap(int event, Event* e)
   /* make sure we weren't cancelled */
   if (action.cancelled) {
     mutex.clear();
-    pluginAllocator.free(this); //ugly
+    pluginAllocator.free(this); // ugly
     return EVENT_DONE;
   }
 
@@ -180,10 +181,10 @@ RemapPlugins::run_remap(int event, Event* e)
       action.continuation->handleEvent(EVENT_REMAP_COMPLETE, NULL);
       mutex.clear();
       action.mutex.clear();
-      mutex = NULL;
+      mutex        = NULL;
       action.mutex = NULL;
-      //THREAD_FREE(this, pluginAllocator, t);
-      pluginAllocator.free(this);       //ugly
+      // THREAD_FREE(this, pluginAllocator, t);
+      pluginAllocator.free(this); // ugly
       return EVENT_DONE;
     } else {
       e->schedule_imm(event);

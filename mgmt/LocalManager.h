@@ -45,29 +45,28 @@ class FileManager;
 class ClusterCom;
 class VMap;
 
-enum ManagementPendingOperation
-{
-  MGMT_PENDING_NONE,          // Do nothing
-  MGMT_PENDING_RESTART,       // Restart TS and TM
-  MGMT_PENDING_BOUNCE,        // Restart TS
-  MGMT_PENDING_IDLE_RESTART,  // Restart TS and TM when TS is idle
-  MGMT_PENDING_IDLE_BOUNCE    // Restart TS when TS is idle
+enum ManagementPendingOperation {
+  MGMT_PENDING_NONE,         // Do nothing
+  MGMT_PENDING_RESTART,      // Restart TS and TM
+  MGMT_PENDING_BOUNCE,       // Restart TS
+  MGMT_PENDING_IDLE_RESTART, // Restart TS and TM when TS is idle
+  MGMT_PENDING_IDLE_BOUNCE   // Restart TS when TS is idle
 };
 
-class LocalManager: public BaseManager
+class LocalManager : public BaseManager
 {
 public:
   explicit LocalManager(bool proxy_on);
   ~LocalManager();
 
   void initAlarm();
-  void initCCom(const AppVersionInfo& version, FileManager * files, int mcport, char *addr, int rsport);
+  void initCCom(const AppVersionInfo &version, FileManager *files, int mcport, char *addr, int rsport);
   void initMgmtProcessServer();
   void pollMgmtProcessServer();
-  void handleMgmtMsgFromProcesses(MgmtMessageHdr * mh);
+  void handleMgmtMsgFromProcesses(MgmtMessageHdr *mh);
   void sendMgmtMsgToProcesses(int msg_id, const char *data_str);
   void sendMgmtMsgToProcesses(int msg_id, const char *data_raw, int data_len);
-  void sendMgmtMsgToProcesses(MgmtMessageHdr * mh);
+  void sendMgmtMsgToProcesses(MgmtMessageHdr *mh);
 
   void signalFileChange(const char *var_name, bool incVersion = true);
   void signalEvent(int msg_id, const char *data_str);
@@ -77,7 +76,7 @@ public:
   void processEventQueue();
   bool startProxy();
   void listenForProxy();
-  void bindProxyPort(HttpProxyPort&);
+  void bindProxyPort(HttpProxyPort &);
   void closeProxyPorts();
 
   void mgmtCleanup();
@@ -90,17 +89,6 @@ public:
 
   bool processRunning();
   bool clusterOk();
-
-  void tick()
-  {
-    ++internal_ticker;
-  };
-  void resetTicker()
-  {
-    internal_ticker = 0;
-  }
-
-  void syslogThrInit();
 
   volatile bool run_proxy;
   volatile time_t manager_started_at;
@@ -127,24 +115,21 @@ public:
   volatile int watched_process_fd;
   volatile pid_t proxy_launch_pid;
 
-  int mgmt_sync_key;
-
   Alarms *alarm_keeper;
   VMap *virt_map;
   FileManager *configFiles;
 
   ClusterCom *ccom;
 
-  volatile int internal_ticker;
   volatile pid_t watched_process_pid;
 
   int syslog_facility;
 
 #if TS_HAS_WCCP
   wccp::Cache wccp_cache;
-# endif
+#endif
 private:
-};                              /* End class LocalManager */
+}; /* End class LocalManager */
 
 extern LocalManager *lmgmt;
 

@@ -25,6 +25,8 @@
 #define _RegressionSM_h
 
 #include "I_EventSystem.h"
+#include "ts/Regression.h"
+#include "ts/DynArray.h"
 
 /*
   Regression Test Composition State Machine
@@ -32,13 +34,16 @@
   See RegressionSM.cc at the end for an example
 */
 
-struct RegressionSM :  public Continuation {
-
+struct RegressionSM : public Continuation {
   RegressionTest *t; // for use with rprint
 
   // methods to override
   virtual void run(); // replace with leaf regression
-  virtual RegressionSM *clone() { return new RegressionSM(*this); } // replace for run_xxx(int n,...);
+  virtual RegressionSM *
+  clone()
+  {
+    return new RegressionSM(*this);
+  } // replace for run_xxx(int n,...);
 
   // public API
   void done(int status = REGRESSION_TEST_NOT_RUN);
@@ -51,9 +56,10 @@ struct RegressionSM :  public Continuation {
   RegressionSM *parent;
   int nwaiting;
   int nchildren;
-  DynArray<RegressionSM*> children;
+  DynArray<RegressionSM *> children;
   intptr_t n, ichild;
-  bool par, rep;
+  bool parallel;
+  bool repeat;
   Action *pending_action;
 
   int regression_sm_start(int event, void *data);
@@ -62,10 +68,18 @@ struct RegressionSM :  public Continuation {
   void child_done(int status);
   void xrun(RegressionSM *parent);
 
-  RegressionSM(RegressionTest *at = NULL) :
-    t(at), status(REGRESSION_TEST_INPROGRESS),
-    pstatus(0), parent(0), nwaiting(0), nchildren(0), children(0), ichild(0), par(false), rep(false),
-    pending_action(0)
+  RegressionSM(RegressionTest *at = NULL)
+    : t(at),
+      status(REGRESSION_TEST_INPROGRESS),
+      pstatus(0),
+      parent(0),
+      nwaiting(0),
+      nchildren(0),
+      children(0),
+      ichild(0),
+      parallel(false),
+      repeat(false),
+      pending_action(0)
   {
     mutex = new_ProxyMutex();
   }

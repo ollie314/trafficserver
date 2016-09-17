@@ -21,18 +21,19 @@
   limitations under the License.
  */
 
-#include "ink_platform.h"
-#include "ink_defs.h"
-#include "ink_assert.h"
-#include "ink_error.h"
-#include "ink_file.h"
-#include "ink_string.h"
-#include "ink_time.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_memory.h"
+#include "ts/ink_defs.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_error.h"
+#include "ts/ink_file.h"
+#include "ts/ink_string.h"
+#include "ts/ink_time.h"
 
 #include "MgmtUtils.h"
 #include "MultiFile.h"
 #include "ExpandingArray.h"
-#include "TextBuffer.h"
+#include "ts/TextBuffer.h"
 #include "WebMgmtUtils.h"
 
 /****************************************************************************
@@ -45,7 +46,7 @@
 
 MultiFile::MultiFile()
 {
-  managedDir = NULL;
+  managedDir  = NULL;
   dirDescript = NULL;
 }
 
@@ -54,25 +55,25 @@ MultiFile::MultiFile()
 //   Adds table entries to output from the result of WalkFiles
 //
 void
-MultiFile::addTableEntries(ExpandingArray * fileList, textBuffer * output)
+MultiFile::addTableEntries(ExpandingArray *fileList, textBuffer *output)
 {
   int numFiles = fileList->getNumEntries();
   fileEntry *current;
   char *safeName;
   char dateBuf[64];
-  const char dataOpen[] = "\t<td>";
+  const char dataOpen[]  = "\t<td>";
   const char dataClose[] = "</td>\n";
-  const int dataOpenLen = strlen(dataOpen);
+  const int dataOpenLen  = strlen(dataOpen);
   const int dataCloseLen = strlen(dataClose);
 
   for (int i = 0; i < numFiles; i++) {
-    current = (fileEntry *) ((*fileList)[i]);
+    current = (fileEntry *)((*fileList)[i]);
 
     output->copyFrom("<tr>\n", 5);
     output->copyFrom(dataOpen, dataOpenLen);
     safeName = substituteForHTMLChars(current->name);
     output->copyFrom(safeName, strlen(safeName));
-    delete[]safeName;
+    delete[] safeName;
     output->copyFrom(dataClose, dataCloseLen);
     output->copyFrom(dataOpen, dataOpenLen);
 
@@ -83,7 +84,6 @@ MultiFile::addTableEntries(ExpandingArray * fileList, textBuffer * output)
     output->copyFrom(dataClose, dataCloseLen);
     output->copyFrom("</tr>\n", 6);
   }
-
 }
 
 // Mfresult MultiFile::WalkFiles(ExpandingArray* fileList)
@@ -93,7 +93,7 @@ MultiFile::addTableEntries(ExpandingArray * fileList, textBuffer * output)
 //
 
 MFresult
-MultiFile::WalkFiles(ExpandingArray * fileList)
+MultiFile::WalkFiles(ExpandingArray *fileList)
 {
   struct dirent *dirEntry;
   DIR *dir;
@@ -105,8 +105,7 @@ MultiFile::WalkFiles(ExpandingArray * fileList)
   fileEntry *fileListEntry;
 
   if ((dir = opendir(managedDir)) == NULL) {
-    mgmt_log(stderr, "[MultiFile::WalkFiles] Unable to open %s directory: %s: %s\n",
-             dirDescript, managedDir, strerror(errno));
+    mgmt_log("[MultiFile::WalkFiles] Unable to open %s directory: %s: %s\n", dirDescript, managedDir, strerror(errno));
     return MF_NO_DIR;
   }
   // The fun of Solaris - readdir_r requires a buffer passed into it
@@ -116,28 +115,30 @@ MultiFile::WalkFiles(ExpandingArray * fileList)
 
   struct dirent *result;
   while (readdir_r(dir, dirEntry, &result) == 0) {
-    if (!result)
+    if (!result) {
       break;
-    fileName = dirEntry->d_name;
-    filePath = newPathString(managedDir, fileName);
+    }
+    fileName                = dirEntry->d_name;
+    filePath                = newPathString(managedDir, fileName);
     records_config_filePath = newPathString(filePath, "records.config");
     if (stat(filePath, &fileInfo) < 0) {
-      mgmt_log(stderr, "[MultiFile::WalkFiles] Stat of a %s failed %s: %s\n", dirDescript, fileName, strerror(errno));
+      mgmt_log("[MultiFile::WalkFiles] Stat of a %s failed %s: %s\n", dirDescript, fileName, strerror(errno));
     } else {
       if (stat(records_config_filePath, &records_config_fileInfo) < 0) {
-        delete[]filePath;
+        delete[] filePath;
+        delete[] records_config_filePath;
         continue;
       }
       // Ignore ., .., and any dot files
       if (*fileName != '.' && isManaged(fileName)) {
-        fileListEntry = (fileEntry *)ats_malloc(sizeof(fileEntry));
+        fileListEntry         = (fileEntry *)ats_malloc(sizeof(fileEntry));
         fileListEntry->c_time = fileInfo.st_ctime;
         ink_strlcpy(fileListEntry->name, fileName, sizeof(fileListEntry->name));
         fileList->addEntry(fileListEntry);
       }
     }
-    delete[]filePath;
-    delete[]records_config_filePath;
+    delete[] filePath;
+    delete[] records_config_filePath;
   }
 
   ats_free(dirEntry);
@@ -146,7 +147,6 @@ MultiFile::WalkFiles(ExpandingArray * fileList)
   fileList->sortWithFunction(fileEntryCmpFunc);
   return MF_OK;
 }
-
 
 bool
 MultiFile::isManaged(const char *fileName)
@@ -159,11 +159,11 @@ MultiFile::isManaged(const char *fileName)
 }
 
 void
-MultiFile::addSelectOptions(textBuffer * output, ExpandingArray * options)
+MultiFile::addSelectOptions(textBuffer *output, ExpandingArray *options)
 {
-  const char selectEnd[] = "</select>\n";
-  const char option[] = "\t<option value='";
-  const int optionLen = strlen(option);
+  const char selectEnd[]  = "</select>\n";
+  const char option[]     = "\t<option value='";
+  const int optionLen     = strlen(option);
   const char option_end[] = "'>";
   char *safeCurrent;
 
@@ -171,11 +171,11 @@ MultiFile::addSelectOptions(textBuffer * output, ExpandingArray * options)
 
   for (int i = 0; i < numOptions; i++) {
     output->copyFrom(option, optionLen);
-    safeCurrent = substituteForHTMLChars((char *) ((*options)[i]));
+    safeCurrent = substituteForHTMLChars((char *)((*options)[i]));
     output->copyFrom(safeCurrent, strlen(safeCurrent));
     output->copyFrom(option_end, strlen(option_end));
     output->copyFrom(safeCurrent, strlen(safeCurrent));
-    delete[]safeCurrent;
+    delete[] safeCurrent;
     output->copyFrom("\n", 1);
   }
   output->copyFrom(selectEnd, strlen(selectEnd));
@@ -191,8 +191,8 @@ MultiFile::addSelectOptions(textBuffer * output, ExpandingArray * options)
 int
 fileEntryCmpFunc(const void *e1, const void *e2)
 {
-  fileEntry *entry1 = (fileEntry *) * (void **) e1;
-  fileEntry *entry2 = (fileEntry *) * (void **) e2;
+  fileEntry *entry1 = (fileEntry *)*(void **)e1;
+  fileEntry *entry2 = (fileEntry *)*(void **)e2;
 
   if (entry1->c_time > entry2->c_time) {
     return 1;
@@ -214,12 +214,13 @@ char *
 MultiFile::newPathString(const char *s1, const char *s2)
 {
   char *newStr;
-  int  srcLen; // is the length of the src rootpath
-  int  addLen; // maximum total path length
+  int srcLen; // is the length of the src rootpath
+  int addLen; // maximum total path length
 
   // Treat null as an empty path.
-  if (!s2)
+  if (!s2) {
     s2 = "";
+  }
   addLen = strlen(s2) + 1;
   if (*s2 == '/') {
     // If addpath is rooted, then rootpath is unused.
@@ -238,8 +239,9 @@ MultiFile::newPathString(const char *s1, const char *s2)
   ink_assert(newStr != NULL);
 
   ink_strlcpy(newStr, s1, addLen);
-  if (newStr[srcLen - 1] != '/')
+  if (newStr[srcLen - 1] != '/') {
     newStr[srcLen++] = '/';
+  }
   ink_strlcpy(&newStr[srcLen], s2, addLen - srcLen);
 
   return newStr;

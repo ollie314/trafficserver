@@ -37,50 +37,57 @@
 
 using namespace std;
 
-namespace net_instaweb {
+namespace net_instaweb
+{
+RewriteOptions::Properties *AtsRewriteOptions::ats_properties_ = NULL;
 
-
-RewriteOptions::Properties* AtsRewriteOptions::ats_properties_ = NULL;
-
-AtsRewriteOptions::AtsRewriteOptions(ThreadSystem* thread_system)
-    : SystemRewriteOptions(thread_system) {
-
+AtsRewriteOptions::AtsRewriteOptions(ThreadSystem *thread_system) : SystemRewriteOptions(thread_system)
+{
   Init();
 }
 
-void AtsRewriteOptions::Init() {
-  DCHECK(ats_properties_ != NULL)
-      << "Call AtsRewriteOptions::Initialize() before construction";
+void
+AtsRewriteOptions::Init()
+{
+  DCHECK(ats_properties_ != NULL) << "Call AtsRewriteOptions::Initialize() before construction";
   InitializeOptions(ats_properties_);
 }
 
-void AtsRewriteOptions::AddProperties() {
+void
+AtsRewriteOptions::AddProperties()
+{
   MergeSubclassProperties(ats_properties_);
   AtsRewriteOptions dummy_config(NULL);
 
   dummy_config.set_default_x_header_value(MOD_PAGESPEED_VERSION_STRING "-" LASTCHANGE_STRING);
 }
 
-void AtsRewriteOptions::Initialize() {
+void
+AtsRewriteOptions::Initialize()
+{
   if (Properties::Initialize(&ats_properties_)) {
     SystemRewriteOptions::Initialize();
     AddProperties();
   }
 }
 
-void AtsRewriteOptions::Terminate() {
+void
+AtsRewriteOptions::Terminate()
+{
   if (Properties::Terminate(&ats_properties_)) {
     SystemRewriteOptions::Terminate();
   }
 }
 
-bool AtsRewriteOptions::IsDirective(StringPiece config_directive,
-                                    StringPiece compare_directive) {
+bool
+AtsRewriteOptions::IsDirective(StringPiece config_directive, StringPiece compare_directive)
+{
   return StringCaseEqual(config_directive, compare_directive);
 }
 
-RewriteOptions::OptionSettingResult AtsRewriteOptions::ParseAndSetOptions0(
-    StringPiece directive, GoogleString* msg, MessageHandler* handler) {
+RewriteOptions::OptionSettingResult
+AtsRewriteOptions::ParseAndSetOptions0(StringPiece directive, GoogleString *msg, MessageHandler *handler)
+{
   if (IsDirective(directive, "on")) {
     set_enabled(RewriteOptions::kEnabledOn);
   } else if (IsDirective(directive, "off")) {
@@ -93,11 +100,9 @@ RewriteOptions::OptionSettingResult AtsRewriteOptions::ParseAndSetOptions0(
   return RewriteOptions::kOptionOk;
 }
 
-
 RewriteOptions::OptionSettingResult
-AtsRewriteOptions::ParseAndSetOptionFromName1(
-    StringPiece name, StringPiece arg,
-    GoogleString* msg, MessageHandler* handler) {
+AtsRewriteOptions::ParseAndSetOptionFromName1(StringPiece name, StringPiece arg, GoogleString *msg, MessageHandler *handler)
+{
   // FileCachePath needs error checking.
   if (StringCaseEqual(name, kFileCachePath)) {
     if (!StringCaseStartsWith(arg, "/")) {
@@ -106,24 +111,25 @@ AtsRewriteOptions::ParseAndSetOptionFromName1(
     }
   }
 
-  return SystemRewriteOptions::ParseAndSetOptionFromName1(
-      name, arg, msg, handler);
+  return SystemRewriteOptions::ParseAndSetOptionFromName1(name, arg, msg, handler);
 }
 
-bool AtsRewriteOptions::SetBoolFlag(bool* v, StringPiece arg) {
+bool
+AtsRewriteOptions::SetBoolFlag(bool *v, StringPiece arg)
+{
   if (IsDirective(arg, "on")) {
-    *v=true;
+    *v = true;
     return true;
   } else if (IsDirective(arg, "off")) {
-    *v=false;
+    *v = false;
     return true;
   }
   return false;
 }
 
-const char*
-AtsRewriteOptions::ParseAndSetOptions(
-    vector<string> args, MessageHandler* handler, global_settings& global_config) {
+const char *
+AtsRewriteOptions::ParseAndSetOptions(vector<string> args, MessageHandler *handler, global_settings &global_config)
+{
   int n_args = args.size();
   CHECK_GE(n_args, 1);
 
@@ -142,8 +148,8 @@ AtsRewriteOptions::ParseAndSetOptions(
   } else if (n_args == 2) {
     StringPiece arg = args[1];
     if (IsDirective(directive, "UsePerVHostStatistics")) {
-      if (!SetBoolFlag(&global_config.use_per_vhost_statistics,arg)) {
-        msg = "Failed to set UsePerVHostStatistics value";
+      if (!SetBoolFlag(&global_config.use_per_vhost_statistics, arg)) {
+        msg    = "Failed to set UsePerVHostStatistics value";
         result = RewriteOptions::kOptionValueInvalid;
       } else {
         result = RewriteOptions::kOptionOk;
@@ -155,14 +161,14 @@ AtsRewriteOptions::ParseAndSetOptions(
       bool ok = StringToInt(arg.as_string(), &message_buffer_size);
       if (ok && message_buffer_size >= 0) {
         global_config.message_buffer_size = message_buffer_size;
-        result = RewriteOptions::kOptionOk;
+        result                            = RewriteOptions::kOptionOk;
       } else {
-        msg = "Failed to set MessageBufferSize value";
+        msg    = "Failed to set MessageBufferSize value";
         result = RewriteOptions::kOptionValueInvalid;
       }
     } else if (IsDirective(directive, "UseNativeFetcher")) {
-      if (!SetBoolFlag(&global_config.info_urls_local_only,arg)) {
-        msg = "Failed to set UseNativeFetcher value";
+      if (!SetBoolFlag(&global_config.info_urls_local_only, arg)) {
+        msg    = "Failed to set UseNativeFetcher value";
         result = RewriteOptions::kOptionValueInvalid;
       } else {
         msg = "Native fetcher is not available in this release";
@@ -171,12 +177,12 @@ AtsRewriteOptions::ParseAndSetOptions(
       }
     } else if (IsDirective(directive, "InfoUrlsLocalOnly")) {
       if (!SetBoolFlag(&global_config.info_urls_local_only, arg)) {
-        msg = "Failed to set InfoUrlsLocalOnly value";
+        msg    = "Failed to set InfoUrlsLocalOnly value";
         result = RewriteOptions::kOptionValueInvalid;
       } else {
         result = RewriteOptions::kOptionOk;
       }
-    }/* else if (IsDirective(directive, "RateLimitBackgroundFetches")) {
+    } /* else if (IsDirective(directive, "RateLimitBackgroundFetches")) {
         if (!SetBoolFlag(&global_config.rate_limit_background_fetches, arg)) {
         msg = "Failed to set RateLimitBackgroundFetches value";
         result = RewriteOptions::kOptionValueInvalid;
@@ -204,7 +210,7 @@ AtsRewriteOptions::ParseAndSetOptions(
                     } else {
                     result = RewriteOptions::kOptionOk;
                     }
-                    } */else {
+                    } */ else {
       result = ParseAndSetOptionFromName1(directive, args[1], &msg, handler);
     }
   } else if (n_args == 3) {
@@ -212,52 +218,49 @@ AtsRewriteOptions::ParseAndSetOptions(
       int64 kb = 0;
       if (!StringToInt64(args[2], &kb) || kb < 0) {
         result = RewriteOptions::kOptionValueInvalid;
-        msg = "size_kb must be a positive 64-bit integer";
+        msg    = "size_kb must be a positive 64-bit integer";
       } else {
         global_config.shm_cache_size_kb = kb;
-        result = kOptionOk;
-        //bool ok = driver_factory->caches()->CreateShmMetadataCache(
+        result                          = kOptionOk;
+        // bool ok = driver_factory->caches()->CreateShmMetadataCache(
         //    args[1].as_string(), kb, &msg);
-        //result = ok ? kOptionOk : kOptionValueInvalid;
+        // result = ok ? kOptionOk : kOptionValueInvalid;
       }
     } else {
-      result = ParseAndSetOptionFromName2(directive, args[1], args[2],
-                                          &msg, handler);
+      result = ParseAndSetOptionFromName2(directive, args[1], args[2], &msg, handler);
     }
   } else if (n_args == 4) {
-    result = ParseAndSetOptionFromName3(
-        directive, args[1], args[2], args[3], &msg, handler);
+    result = ParseAndSetOptionFromName3(directive, args[1], args[2], args[3], &msg, handler);
   } else {
     return "unknown option";
   }
 
   if (msg.size()) {
-    handler->Message(kWarning, "Error handling config line [%s]: [%s]",
-                     JoinString(args, ' ').c_str(), msg.c_str());
+    handler->Message(kWarning, "Error handling config line [%s]: [%s]", JoinString(args, ' ').c_str(), msg.c_str());
   }
 
   switch (result) {
-    case RewriteOptions::kOptionOk:
-      return NULL;
-    case RewriteOptions::kOptionNameUnknown:
-      handler->Message(kWarning, "%s", JoinString(args, ' ').c_str());
-      return "unknown option";
-    case RewriteOptions::kOptionValueInvalid: {
-      handler->Message(kWarning, "%s", JoinString(args, ' ').c_str());
-      return "Invalid value";
-    }
+  case RewriteOptions::kOptionOk:
+    return NULL;
+  case RewriteOptions::kOptionNameUnknown:
+    handler->Message(kWarning, "%s", JoinString(args, ' ').c_str());
+    return "unknown option";
+  case RewriteOptions::kOptionValueInvalid: {
+    handler->Message(kWarning, "%s", JoinString(args, ' ').c_str());
+    return "Invalid value";
+  }
   }
 
   CHECK(false);
   return NULL;
 }
 
-AtsRewriteOptions* AtsRewriteOptions::Clone() const {
-  AtsRewriteOptions* options = new AtsRewriteOptions(this->thread_system());
+AtsRewriteOptions *
+AtsRewriteOptions::Clone() const
+{
+  AtsRewriteOptions *options = new AtsRewriteOptions(this->thread_system());
   options->Merge(*this);
   return options;
 }
 
-
-}  // namespace net_instaweb
-
+} // namespace net_instaweb

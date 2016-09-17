@@ -27,13 +27,13 @@
 
  ***************************************************************************/
 
-#include "libts.h"
-#include "ink_sys_control.h"
-#include "signals.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_lockfile.h"
+#include "ts/ink_sys_control.h"
+#include "ts/signals.h"
 #include "DiagsConfig.h"
 #include "Main.h"
 
-#include "Error.h"
 #include "P_EventSystem.h"
 #include "P_RecProcess.h"
 
@@ -50,20 +50,19 @@ class HttpBodyFactory;
 extern int fds_limit;
 extern int cluster_port_number;
 
-int command_flag = 0;
-int http_accept_port_number = 0;
+int command_flag                = 0;
+int http_accept_port_number     = 0;
 int http_accept_file_descriptor = 0;
-int remote_management_flag = 0;
-int auto_clear_hostdb_flag = 0;
-char proxy_name[MAXDNAME + 1] = "unknown";
+int remote_management_flag      = 0;
+int auto_clear_hostdb_flag      = 0;
+char proxy_name[MAXDNAME + 1]   = "unknown";
 
-char error_tags[1024] = "";
-char action_tags[1024] = "";
+char error_tags[1024]    = "";
+char action_tags[1024]   = "";
 char command_string[512] = "";
 
-
-//Diags *diags = NULL;
-DiagsConfig *diagsConfig = NULL;
+// Diags *diags = NULL;
+DiagsConfig *diagsConfig      = NULL;
 HttpBodyFactory *body_factory = NULL;
 AppVersionInfo appVersionInfo;
 
@@ -73,7 +72,7 @@ AppVersionInfo appVersionInfo;
 
 // Handle fatal signals by logging and core dumping ...
 static void
-logging_crash_handler(int signo, siginfo_t * info, void * ptr)
+logging_crash_handler(int signo, siginfo_t *info, void *ptr)
 {
   signal_format_siginfo(signo, info, appVersionInfo.AppStr);
   signal_crash_handler(signo, info, ptr);
@@ -128,14 +127,15 @@ initialize_process_manager()
   RecRegisterStatString(RECT_PROCESS, "proxy.process.version.server.build_number", appVersionInfo.BldNumStr, RECP_NON_PERSISTENT);
   RecRegisterStatString(RECT_PROCESS, "proxy.process.version.server.build_time", appVersionInfo.BldTimeStr, RECP_NON_PERSISTENT);
   RecRegisterStatString(RECT_PROCESS, "proxy.process.version.server.build_date", appVersionInfo.BldDateStr, RECP_NON_PERSISTENT);
-  RecRegisterStatString(RECT_PROCESS, "proxy.process.version.server.build_machine", appVersionInfo.BldMachineStr, RECP_NON_PERSISTENT);
-  RecRegisterStatString(RECT_PROCESS, "proxy.process.version.server.build_person", appVersionInfo.BldPersonStr, RECP_NON_PERSISTENT);
-//    RecRegisterStatString(RECT_PROCESS,
-//                         "proxy.process.version.server.build_compile_flags",
-//                         appVersionInfo.BldCompileFlagsStr,
-//                         RECP_NON_PERSISTENT);
+  RecRegisterStatString(RECT_PROCESS, "proxy.process.version.server.build_machine", appVersionInfo.BldMachineStr,
+                        RECP_NON_PERSISTENT);
+  RecRegisterStatString(RECT_PROCESS, "proxy.process.version.server.build_person", appVersionInfo.BldPersonStr,
+                        RECP_NON_PERSISTENT);
+  //    RecRegisterStatString(RECT_PROCESS,
+  //                         "proxy.process.version.server.build_compile_flags",
+  //                         appVersionInfo.BldCompileFlagsStr,
+  //                         RECP_NON_PERSISTENT);
 }
-
 
 /*-------------------------------------------------------------------------
   check_lockfile
@@ -149,9 +149,9 @@ check_lockfile()
   char *lockfile = NULL;
 
   if (access(Layout::get()->runtimedir, R_OK | W_OK) == -1) {
-    fprintf(stderr,"unable to access() dir'%s': %d, %s\n", Layout::get()->runtimedir, errno, strerror(errno));
-    fprintf(stderr," please set correct path in env variable TS_ROOT \n");
-    _exit(1);
+    fprintf(stderr, "unable to access() dir'%s': %d, %s\n", Layout::get()->runtimedir, errno, strerror(errno));
+    fprintf(stderr, " please set correct path in env variable TS_ROOT \n");
+    ::exit(1);
   }
   lockfile = Layout::relative_to(Layout::get()->runtimedir, SERVER_LOCK);
 
@@ -175,7 +175,7 @@ check_lockfile()
     } else {
       fprintf(stderr, "\n");
     }
-    _exit(1);
+    ::exit(1);
   }
   ats_free(lockfile);
 }
@@ -210,7 +210,7 @@ init_log_standalone(const char *pgm_name, bool one_copy)
   init_system(true);
   initialize_process_manager();
   diagsConfig = new DiagsConfig(logfile, error_tags, action_tags);
-  diags = diagsConfig->diags;
+  diags       = diagsConfig->diags;
 }
 
 /*-------------------------------------------------------------------------
@@ -237,11 +237,10 @@ init_log_standalone_basic(const char *pgm_name)
 
   init_system(false);
   const bool use_records = false;
-  diagsConfig = new DiagsConfig(logfile, error_tags, action_tags, use_records);
-  diags = diagsConfig->diags;
+  diagsConfig            = new DiagsConfig(logfile, error_tags, action_tags, use_records);
+  diags                  = diagsConfig->diags;
   // set stdin/stdout to be unbuffered
   //
   setbuf(stdin, NULL);
   setbuf(stdout, NULL);
-
 }

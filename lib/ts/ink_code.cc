@@ -23,24 +23,27 @@
 
 #include <string.h>
 #include <stdio.h>
-#include "ink_code.h"
-#include "INK_MD5.h"
-#include "ink_assert.h"
-#include "INK_MD5.h"
+#include "ts/ink_code.h"
+#include "ts/INK_MD5.h"
+#include "ts/ink_assert.h"
+#include "ts/INK_MD5.h"
 
 ats::CryptoHash const ats::CRYPTO_HASH_ZERO; // default constructed is correct.
 
-MD5Context::MD5Context() {
+MD5Context::MD5Context()
+{
   MD5_Init(&_ctx);
 }
 
 bool
-MD5Context::update(void const* data, int length) {
+MD5Context::update(void const *data, int length)
+{
   return 0 != MD5_Update(&_ctx, data, length);
 }
 
 bool
-MD5Context::finalize(CryptoHash& hash) {
+MD5Context::finalize(CryptoHash &hash)
+{
   return 0 != MD5_Final(hash.u8, &_ctx);
 }
 
@@ -48,7 +51,8 @@ MD5Context::finalize(CryptoHash& hash) {
   @brief Wrapper around MD5_Init
 */
 int
-ink_code_incr_md5_init(INK_DIGEST_CTX * context) {
+ink_code_incr_md5_init(INK_DIGEST_CTX *context)
+{
   return MD5_Init(context);
 }
 
@@ -56,7 +60,8 @@ ink_code_incr_md5_init(INK_DIGEST_CTX * context) {
   @brief Wrapper around MD5_Update
 */
 int
-ink_code_incr_md5_update(INK_DIGEST_CTX * context, const char *input, int input_length) {
+ink_code_incr_md5_update(INK_DIGEST_CTX *context, const char *input, int input_length)
+{
   return MD5_Update(context, input, input_length);
 }
 
@@ -64,8 +69,9 @@ ink_code_incr_md5_update(INK_DIGEST_CTX * context, const char *input, int input_
   @brief Wrapper around MD5_Final
 */
 int
-ink_code_incr_md5_final(char *sixteen_byte_hash_pointer, INK_DIGEST_CTX * context) {
-  return MD5_Final((unsigned char*)sixteen_byte_hash_pointer, context);
+ink_code_incr_md5_final(char *sixteen_byte_hash_pointer, INK_DIGEST_CTX *context)
+{
+  return MD5_Final((unsigned char *)sixteen_byte_hash_pointer, context);
 }
 
 /**
@@ -74,7 +80,7 @@ ink_code_incr_md5_final(char *sixteen_byte_hash_pointer, INK_DIGEST_CTX * contex
   @return always returns 0, maybe some error checking should be done
 */
 int
-ink_code_md5(unsigned char const* input, int input_length, unsigned char *sixteen_byte_hash_pointer)
+ink_code_md5(unsigned char const *input, int input_length, unsigned char *sixteen_byte_hash_pointer)
 {
   MD5_CTX context;
 
@@ -84,33 +90,6 @@ ink_code_md5(unsigned char const* input, int input_length, unsigned char *sixtee
 
   return (0);
 }
-
-/**
-  @brief Converts a MD5 to a null-terminated string
-
-  Externalizes an INK_MD5 as a null-terminated string into the first argument.
-  Side Effects: none
-  Reentrancy:     n/a.
-  Thread Safety:  safe.
-  Mem Management: stomps the passed dest char*.
-
-  @return returns the passed destination string ptr.
-*/
-/* reentrant version */
-char *
-ink_code_md5_stringify(char *dest33, const size_t destSize, const char *md5)
-{
-  ink_assert(destSize >= 33);
-
-  int i;
-  for (i = 0; i < 16; i++) {
-    // we check the size of the destination buffer above
-    // coverity[secure_coding]
-    sprintf(&(dest33[i * 2]), "%02X", md5[i]);
-  }
-  ink_assert(dest33[32] == '\0');
-  return (dest33);
-}                               /* End ink_code_stringify_md5(const char *md5) */
 
 /**
   @brief Converts a MD5 to a null-terminated string
@@ -126,12 +105,12 @@ ink_code_md5_stringify(char *dest33, const size_t destSize, const char *md5)
 */
 /* reentrant version */
 char *
-ink_code_to_hex_str(char *dest33, uint8_t const* hash)
+ink_code_to_hex_str(char *dest33, uint8_t const *hash)
 {
   int i;
   char *d;
 
-  static char hex_digits[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+  static char hex_digits[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
   d = dest33;
   for (i = 0; i < 16; i += 4) {
@@ -148,4 +127,3 @@ ink_code_to_hex_str(char *dest33, uint8_t const* hash)
   *d = '\0';
   return (dest33);
 }
-

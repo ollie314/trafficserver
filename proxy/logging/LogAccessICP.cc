@@ -31,8 +31,7 @@
 
 
  ***************************************************************************/
-#include "libts.h"
-#include "Error.h"
+#include "ts/ink_platform.h"
 #include "HTTP.h"
 #include "ICP.h"
 #include "ICPlog.h"
@@ -43,8 +42,7 @@
   LogAccessICP
   -------------------------------------------------------------------------*/
 
-LogAccessICP::LogAccessICP(ICPlog * icp_log)
-  : m_icp_log(icp_log)
+LogAccessICP::LogAccessICP(ICPlog *icp_log) : m_icp_log(icp_log)
 {
   ink_assert(m_icp_log != NULL);
 }
@@ -89,8 +87,8 @@ LogAccessICP::marshal_client_host_port(char *buf)
 int
 LogAccessICP::marshal_client_auth_user_name(char *buf)
 {
-  char *str = (char *) m_icp_log->GetIdent();
-  int len = LogAccess::strlen(str);
+  char *str = (char *)m_icp_log->GetIdent();
+  int len   = LogAccess::strlen(str);
   if (buf) {
     marshal_str(buf, str, len);
   }
@@ -121,8 +119,8 @@ LogAccessICP::marshal_client_req_text(char *buf)
 int
 LogAccessICP::marshal_client_req_http_method(char *buf)
 {
-  char *str = (char *) m_icp_log->GetMethod();
-  int len = LogAccess::strlen(str);
+  char *str = (char *)m_icp_log->GetMethod();
+  int len   = LogAccess::strlen(str);
 
   if (buf) {
     marshal_str(buf, str, len);
@@ -136,8 +134,8 @@ LogAccessICP::marshal_client_req_http_method(char *buf)
 int
 LogAccessICP::marshal_client_req_url(char *buf)
 {
-  char *str = (char *) m_icp_log->GetURI();
-  int len = LogAccess::strlen(str);
+  char *str = (char *)m_icp_log->GetURI();
+  int len   = LogAccess::strlen(str);
   if (buf) {
     marshal_str(buf, str, len);
   }
@@ -155,14 +153,14 @@ LogAccessICP::marshal_client_req_url_canon(char *buf)
 
   // FIXME: need to ensure that m_icp_log->GetURI() is NUL-terminated
   //
-  char *uri_str = (char *) m_icp_log->GetURI();
-  int uri_len =::strlen(uri_str);
-  char *str = LogUtils::escapify_url(&arena, uri_str, uri_len,
-                                     &escapified_len);
+  char *uri_str = (char *)m_icp_log->GetURI();
+  int uri_len   = ::strlen(uri_str);
+  char *str     = LogUtils::escapify_url(&arena, uri_str, uri_len, &escapified_len);
 
-  int len = round_strlen(escapified_len + 1);   // the padded len
-  if (buf)
+  int len = round_strlen(escapified_len + 1); // the padded len
+  if (buf) {
     marshal_str(buf, str, len);
+  }
   return len;
 }
 
@@ -174,15 +172,16 @@ LogAccessICP::marshal_proxy_resp_content_type(char *buf)
 {
   // FIXME: need to ensure that m_icp_log->GetContentType() is NUL-terminated
   //
-  char *ct_str = (char *) m_icp_log->GetContentType();
-  int ct_len = ::strlen(ct_str);
+  char *ct_str = (char *)m_icp_log->GetContentType();
+  int ct_len   = ::strlen(ct_str);
 
   // FIXME: need to be sure remove_content_type_attributecan mutate ct_str
   //
   LogUtils::remove_content_type_attributes(ct_str, &ct_len);
   int len = LogAccess::strlen(ct_str);
-  if (buf)
+  if (buf) {
     marshal_str(buf, ct_str, len);
+  }
   return len;
 }
 
@@ -219,7 +218,7 @@ int
 LogAccessICP::marshal_proxy_resp_status_code(char *buf)
 {
   if (buf) {
-    int64_t status = 0;         // '000' for ICP
+    int64_t status = 0; // '000' for ICP
     marshal_int(buf, status);
   }
   return INK_MIN_ALIGN;
@@ -233,7 +232,7 @@ LogAccessICP::marshal_cache_result_code(char *buf)
 {
   if (buf) {
     SquidLogCode code = m_icp_log->GetAction();
-    marshal_int(buf, (int64_t) code);
+    marshal_int(buf, (int64_t)code);
   }
   return INK_MIN_ALIGN;
 }
@@ -246,7 +245,7 @@ LogAccessICP::marshal_proxy_hierarchy_route(char *buf)
 {
   if (buf) {
     SquidHierarchyCode code = m_icp_log->GetHierarchy();
-    marshal_int(buf, (int64_t) code);
+    marshal_int(buf, (int64_t)code);
   }
   return INK_MIN_ALIGN;
 }
@@ -257,8 +256,8 @@ LogAccessICP::marshal_proxy_hierarchy_route(char *buf)
 int
 LogAccessICP::marshal_server_host_name(char *buf)
 {
-  char *str = (char *) m_icp_log->GetFromHost();
-  int len = LogAccess::strlen(str);
+  char *str = (char *)m_icp_log->GetFromHost();
+  int len   = LogAccess::strlen(str);
   if (buf) {
     marshal_str(buf, str, len);
   }
@@ -274,7 +273,7 @@ LogAccessICP::marshal_transfer_time_ms(char *buf)
   if (buf) {
     ink_hrtime elapsed = m_icp_log->GetElapsedTime();
     elapsed /= HRTIME_MSECOND;
-    int64_t val = (int64_t) elapsed;
+    int64_t val = (int64_t)elapsed;
     marshal_int(buf, val);
   }
   return INK_MIN_ALIGN;
@@ -286,7 +285,7 @@ LogAccessICP::marshal_transfer_time_s(char *buf)
   if (buf) {
     ink_hrtime elapsed = m_icp_log->GetElapsedTime();
     elapsed /= HRTIME_SECOND;
-    int64_t val = (int64_t) elapsed;
+    int64_t val = (int64_t)elapsed;
     marshal_int(buf, val);
   }
   return INK_MIN_ALIGN;

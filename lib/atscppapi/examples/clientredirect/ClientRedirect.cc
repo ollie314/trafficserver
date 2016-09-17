@@ -28,12 +28,17 @@ using std::endl;
 using std::list;
 using std::string;
 
+namespace
+{
+GlobalPlugin *plugin;
+}
 
-class ClientRedirectTransactionPlugin : public atscppapi::TransactionPlugin {
+class ClientRedirectTransactionPlugin : public atscppapi::TransactionPlugin
+{
 public:
   ClientRedirectTransactionPlugin(Transaction &transaction, const string &location)
-     : TransactionPlugin(transaction), location_(location) {
-
+    : TransactionPlugin(transaction), location_(location)
+  {
     //
     // We will set this transaction to jump to error state and then we will setup
     // the redirect on SEND_RESPONSE_HEADERS
@@ -42,35 +47,38 @@ public:
     transaction.error();
   }
 
-  void handleSendResponseHeaders(Transaction &transaction) {
+  void
+  handleSendResponseHeaders(Transaction &transaction)
+  {
     transaction.getClientResponse().setStatusCode(HTTP_STATUS_MOVED_TEMPORARILY);
     transaction.getClientResponse().setReasonPhrase("Moved Temporarily");
     transaction.getClientResponse().getHeaders()["Location"] = location_;
     transaction.resume();
   }
 
-  virtual ~ClientRedirectTransactionPlugin() { }
+  virtual ~ClientRedirectTransactionPlugin() {}
 private:
   string location_;
 };
 
-
-class ClientRedirectGlobalPlugin : public GlobalPlugin {
+class ClientRedirectGlobalPlugin : public GlobalPlugin
+{
 public:
-  ClientRedirectGlobalPlugin() {
-    registerHook(HOOK_SEND_REQUEST_HEADERS);
-  }
-
-  void handleSendRequestHeaders(Transaction &transaction) {
-    if(transaction.getClientRequest().getUrl().getQuery().find("redirect=1") != string::npos) {
+  ClientRedirectGlobalPlugin() { registerHook(HOOK_SEND_REQUEST_HEADERS); }
+  void
+  handleSendRequestHeaders(Transaction &transaction)
+  {
+    if (transaction.getClientRequest().getUrl().getQuery().find("redirect=1") != string::npos) {
       transaction.addPlugin(new ClientRedirectTransactionPlugin(transaction, "http://www.linkedin.com/"));
       return;
     }
     transaction.resume();
   }
-
 };
 
-void TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED) {
-  new ClientRedirectGlobalPlugin();
+void
+TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED)
+{
+  RegisterGlobalPlugin("CPP_Example_ClientDirect", "apache", "dev@trafficserver.apache.org");
+  plugin = new ClientRedirectGlobalPlugin();
 }

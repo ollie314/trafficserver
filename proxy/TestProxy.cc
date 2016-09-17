@@ -30,9 +30,7 @@
 #include "OneWayMultiTunnel.h"
 #include "Cache.h"
 
-
-struct TestProxy:Continuation
-{
+struct TestProxy : Continuation {
   VConnection *vc;
   VConnection *vconnection_vector[2];
   VConnection *remote;
@@ -52,7 +50,8 @@ struct TestProxy:Continuation
   CacheObjInfo *objinfo;
   HttpHeader *request_header;
 
-  int done()
+  int
+  done()
   {
     ink_assert(inbuf);
     if (inbuf)
@@ -69,10 +68,11 @@ struct TestProxy:Continuation
     if (tunnel)
       delete tunnel;
     delete this;
-      return EVENT_DONE;
+    return EVENT_DONE;
   }
 
-  int gets(VIO * vio)
+  int
+  gets(VIO *vio)
   {
     char *sx = s, *x;
     int t, i;
@@ -90,7 +90,7 @@ struct TestProxy:Continuation
         --t;
     }
 
-//    i = strrchr(s,' ');
+    //    i = strrchr(s,' ');
 
     if (s[i - 2] == 'X') {
       i -= 2;
@@ -104,51 +104,51 @@ struct TestProxy:Continuation
     return x - vio->buffer.mbuf->start;
   }
 
-  int startEvent(int event, VIO * vio)
+  int
+  startEvent(int event, VIO *vio)
   {
     char *temp;
     if (event != VC_EVENT_READ_READY) {
-      printf("TestProxy startEvent error %d %X\n", event, (unsigned int) vio->vc_server);
+      printf("TestProxy startEvent error %d %X\n", event, (unsigned int)vio->vc_server);
       return done();
     }
-    inVIO = vio;
-    vc = (NetVConnection *) vio->vc_server;
-    int res = 0;
+    inVIO       = vio;
+    vc          = (NetVConnection *)vio->vc_server;
+    int res     = 0;
     char *thost = NULL;
     if ((res = gets(vio))) {
       if (res < 0) {
         printf("TestProxy startEvent line too long\n");
         return done();
       }
-      //for (int i = 0; i <= res; i++) fprintf(stderr,"[%c (%d)]\n",s[i],s[i]);
+      // for (int i = 0; i <= res; i++) fprintf(stderr,"[%c (%d)]\n",s[i],s[i]);
       s[res] = 0;
       if ((res > 0) && (s[res - 1] == '\r'))
         s[res - 1] = 0;
       // printf("got [%s]\n",s);
       if (s[4] == '/') {
-        url = s + 5;
-        url_end = strchr(url, ' ');
+        url      = s + 5;
+        url_end  = strchr(url, ' ');
         *url_end = 0;
         SET_HANDLER(fileEvent);
         diskProcessor.open_vc(this, url, O_RDONLY);
         return EVENT_DONE;
-      }
-      else
-        thost = s + 11;         // GET http
-      url = strchr(thost, '/'); // done before portStr stompage */
-      temp = strchr(thost, ' ');
+      } else
+        thost = s + 11;             // GET http
+      url     = strchr(thost, '/'); // done before portStr stompage */
+      temp    = strchr(thost, ' ');
       ink_assert(temp - thost < 1024);
       ink_strlcpy(url_str, thost, sizeof(url_str));
       if (!url)
         return done();
       char *portStr = strchr(thost, ':');
-      *url = 0;
+      *url          = 0;
       if (portStr == NULL) {
         port = 80;
         ink_strlcpy(host, thost, sizeof(host));
       } else {
-        *portStr = '\0';        /* close off the hostname */
-        port = atoi(portStr + 1);
+        *portStr = '\0'; /* close off the hostname */
+        port     = atoi(portStr + 1);
         ink_strlcpy(host, thost, sizeof(host));
         *portStr = ':';
       }
@@ -161,14 +161,15 @@ struct TestProxy:Continuation
     return EVENT_CONT;
   }
 
-  int clusterOpenEvent(int event, void *data)
+  int
+  clusterOpenEvent(int event, void *data)
   {
     if (event == CLUSTER_EVENT_OPEN_FAILED)
       return done();
     if (event == CLUSTER_EVENT_OPEN) {
       if (!data)
         return done();
-      remote = (VConnection *) data;
+      remote        = (VConnection *)data;
       clusterOutVIO = remote->do_io(VIO::WRITE, this, INT64_MAX, inbuf);
       ink_assert(clusterOutVIO);
       SET_HANDLER(tunnelEvent);
@@ -177,9 +178,10 @@ struct TestProxy:Continuation
     return EVENT_CONT;
   }
 
-  int clusterEvent(int event, VConnection * data)
+  int
+  clusterEvent(int event, VConnection *data)
   {
-    (void) event;
+    (void)event;
     vc = data;
     if (!vc)
       return done();
@@ -188,7 +190,8 @@ struct TestProxy:Continuation
     return EVENT_CONT;
   }
 
-  int fileEvent(int event, DiskVConnection * aremote)
+  int
+  fileEvent(int event, DiskVConnection *aremote)
   {
     if (event != DISK_EVENT_OPEN) {
       printf("TestProxy fileEvent error %d\n", event);
@@ -200,14 +203,15 @@ struct TestProxy:Continuation
     return EVENT_CONT;
   }
 
-  int dnsEvent(int event, HostDBInfo * info)
+  int
+  dnsEvent(int event, HostDBInfo *info)
   {
     if (!info) {
       printf("TestProxy dnsEvent error %d\n", event);
       return done();
     }
     SET_HANDLER(cacheCheckEvent);
-    url_struct = new URL((const char *) url_str, sizeof(url_str), true);
+    url_struct = new URL((const char *)url_str, sizeof(url_str), true);
     hostdbinfo = info;
     cacheProcessor.lookup(this, url_struct, false);
     // SET_HANDLER(connectEvent);
@@ -215,28 +219,29 @@ struct TestProxy:Continuation
     return EVENT_DONE;
   }
 
-  int cacheCheckEvent(int event, void *data)
+  int
+  cacheCheckEvent(int event, void *data)
   {
     if (event == CACHE_EVENT_LOOKUP) {
       if (amode == 'x') {
         cout << "Removing object from the cache\n";
         SET_HANDLER(NULL);
         amode = 0;
-        cacheProcessor.remove(&(((CacheObjInfoVector *) data)->data[0]), false);
+        cacheProcessor.remove(&(((CacheObjInfoVector *)data)->data[0]), false);
         return done();
       } else {
         cout << "Serving the object from cache\n";
         SET_HANDLER(cacheReadEvent);
-        cacheProcessor.open_read(this, &(((CacheObjInfoVector *) data)->data[0]), false);
+        cacheProcessor.open_read(this, &(((CacheObjInfoVector *)data)->data[0]), false);
         return EVENT_CONT;
       }
     } else if (event == CACHE_EVENT_LOOKUP_FAILED) {
       cout << "Getting the object from origin server\n";
       SET_HANDLER(cacheCreateCacheFileEvent);
-      objinfo = new CacheObjInfo;
-      request_header = new HttpHeader;
+      objinfo               = new CacheObjInfo;
+      request_header        = new HttpHeader;
       request_header->m_url = *url_struct;
-      objinfo->request = *request_header;
+      objinfo->request      = *request_header;
       cacheProcessor.open_write(this, objinfo, false, CACHE_UNKNOWN_SIZE);
       return EVENT_DONE;
     } else {
@@ -245,7 +250,8 @@ struct TestProxy:Continuation
     }
   }
 
-  int cacheReadEvent(int event, DiskVConnection * aremote)
+  int
+  cacheReadEvent(int event, DiskVConnection *aremote)
   {
     if (event != CACHE_EVENT_OPEN_READ) {
       printf("TestProxy cacheReadEvent error %d\n", event);
@@ -256,7 +262,8 @@ struct TestProxy:Continuation
     new OneWayTunnel(remote, vc, this, TUNNEL_TILL_DONE, true, true, true);
     return EVENT_CONT;
   }
-  int cacheCreateCacheFileEvent(int event, VConnection * acachefile)
+  int
+  cacheCreateCacheFileEvent(int event, VConnection *acachefile)
   {
     if (event != CACHE_EVENT_OPEN_WRITE) {
       printf("TestProxy cacheCreateCacheFileEvent error %d\n", event);
@@ -267,7 +274,8 @@ struct TestProxy:Continuation
     netProcessor.connect(this, hostdbinfo->ip, port, host);
     return EVENT_CONT;
   }
-  int cacheSendGetEvent(int event, NetVConnection * aremote)
+  int
+  cacheSendGetEvent(int event, NetVConnection *aremote)
   {
     if (event != NET_EVENT_OPEN) {
       printf("TestProxy cacheSendGetEvent error %d\n", event);
@@ -276,8 +284,8 @@ struct TestProxy:Continuation
     remote = aremote;
     outbuf = new_MIOBuffer();
     SET_HANDLER(cacheTransRemoteToCacheFileEvent);
-    //aremote->set_inactivity_timeout(HRTIME_MSECONDS(2000));
-    //aremote->set_active_timeout(HRTIME_MSECONDS(60000));
+    // aremote->set_inactivity_timeout(HRTIME_MSECONDS(2000));
+    // aremote->set_active_timeout(HRTIME_MSECONDS(60000));
     *url_end = 0;
     sprintf(outbuf->start, "GET %s HTTP/1.0\nHost: %s\n\n", url, host);
     outbuf->fill(strlen(outbuf->start) + 1);
@@ -285,7 +293,8 @@ struct TestProxy:Continuation
     // printf("sending [%s]\n",outbuf->start);
     return EVENT_CONT;
   }
-  int cacheTransRemoteToCacheFileEvent(int event, VIO * vio)
+  int
+  cacheTransRemoteToCacheFileEvent(int event, VIO *vio)
   {
     if (event != VC_EVENT_WRITE_READY) {
       printf("TestProxy cacheTransRemoteToCacheFileEvent error %d\n", event);
@@ -297,14 +306,15 @@ struct TestProxy:Continuation
     vconnection_vector[0] = vc;
     vconnection_vector[1] = cachefile;
     {
-      int n = cachefile ? 2 : 1;
+      int n     = cachefile ? 2 : 1;
       cachefile = 0;
       new OneWayMultiTunnel(remote, vconnection_vector, n, this, TUNNEL_TILL_DONE, true, true, true);
     }
     return EVENT_DONE;
   }
 
-  int connectEvent(int event, NetVConnection * aremote)
+  int
+  connectEvent(int event, NetVConnection *aremote)
   {
     if (event != NET_EVENT_OPEN) {
       printf("TestProxy connectEvent error %d\n", event);
@@ -321,7 +331,8 @@ struct TestProxy:Continuation
     return EVENT_CONT;
   }
 
-  int sendEvent(int event, VIO * vio)
+  int
+  sendEvent(int event, VIO *vio)
   {
     if (event != VC_EVENT_WRITE_READY) {
       printf("TestProxy sendEvent error %d\n", event);
@@ -330,9 +341,9 @@ struct TestProxy:Continuation
     if (vio->buffer.size())
       return EVENT_CONT;
     SET_HANDLER(tunnelEvent);
-    clusterOutVIO = (VIO *) - 1;        // some impossible value
-    if (((NetVConnectionBase *) vc)->closed) {
-      printf("TestProxy sendEvent unexpected close %X\n", (unsigned int) vc);
+    clusterOutVIO = (VIO *)-1; // some impossible value
+    if (((NetVConnectionBase *)vc)->closed) {
+      printf("TestProxy sendEvent unexpected close %X\n", (unsigned int)vc);
       vc = 0;
       return done();
     }
@@ -340,10 +351,11 @@ struct TestProxy:Continuation
     return EVENT_DONE;
   }
 
-  int tunnelEvent(int event, Continuation * cont)
+  int
+  tunnelEvent(int event, Continuation *cont)
   {
-    (void) cont;
-    if ((VIO *) cont == clusterOutVIO || (VIO *) cont == inVIO) {
+    (void)cont;
+    if ((VIO *)cont == clusterOutVIO || (VIO *)cont == inVIO) {
       if (event == VC_EVENT_WRITE_COMPLETE)
         return EVENT_DONE;
       if (event == VC_EVENT_ERROR || event == VC_EVENT_EOS)
@@ -351,7 +363,7 @@ struct TestProxy:Continuation
       return EVENT_CONT;
     }
     remote = 0;
-    vc = 0;
+    vc     = 0;
     if (event != VC_EVENT_EOS) {
       printf("TestProxy sendEvent error %d\n", event);
       return done();
@@ -360,42 +372,49 @@ struct TestProxy:Continuation
     return done();
   }
 
-  TestProxy(MIOBuffer * abuf)
-:  Continuation(new_ProxyMutex()),
-    vc(0), remote(0), inbuf(abuf), outbuf(0), clusterOutVIO(0),
-    inVIO(0), url(0), url_end(0), amode(0), tunnel(0), cachefile(0) {
+  TestProxy(MIOBuffer *abuf)
+    : Continuation(new_ProxyMutex()),
+      vc(0),
+      remote(0),
+      inbuf(abuf),
+      outbuf(0),
+      clusterOutVIO(0),
+      inVIO(0),
+      url(0),
+      url_end(0),
+      amode(0),
+      tunnel(0),
+      cachefile(0)
+  {
     SET_HANDLER(startEvent);
   }
 };
 
-struct TestAccept:Continuation
-{
-  int startEvent(int event, NetVConnection * e)
+struct TestAccept : Continuation {
+  int
+  startEvent(int event, NetVConnection *e)
   {
     if (event == NET_EVENT_ACCEPT) {
       MIOBuffer *buf = new_MIOBuffer();
-        e->do_io(VIO::READ, new TestProxy(buf), INT64_MAX, buf);
-    } else
-    {
+      e->do_io(VIO::READ, new TestProxy(buf), INT64_MAX, buf);
+    } else {
       printf("TestAccept error %d\n", event);
       return EVENT_DONE;
     }
     return EVENT_CONT;
   }
-TestAccept():Continuation(new_ProxyMutex()) {
-    SET_HANDLER(startEvent);
-  }
+  TestAccept() : Continuation(new_ProxyMutex()) { SET_HANDLER(startEvent); }
 };
 
 void
-redirect_test(Machine * m, void *data, int len)
+redirect_test(Machine *m, void *data, int len)
 {
-  (void) m;
-  (void) len;
+  (void)m;
+  (void)len;
   MIOBuffer *buf = new_MIOBuffer();
-  TestProxy *c = new TestProxy(buf);
+  TestProxy *c   = new TestProxy(buf);
   SET_CONTINUATION_HANDLER(c, clusterEvent);
-  clusterProcessor.connect(c, *(ClusterVCToken *) data);
+  clusterProcessor.connect(c, *(ClusterVCToken *)data);
 }
 
 #ifndef SUB_TEST

@@ -24,12 +24,12 @@
 #ifndef _NETWORK_UTILS_LOCAL_H_
 #define _NETWORK_UTILS_LOCAL_H_
 
-#include "ink_defs.h"
+#include "ts/ink_defs.h"
 #include "mgmtapi.h"
 
 /*****************************************************************************
  * Unmarshalling/marshalling
  *****************************************************************************/
-TSMgmtError preprocess_msg(int fd, void ** req, size_t * reqlen);
+TSMgmtError preprocess_msg(int fd, void **req, size_t *reqlen);
 
 #endif /* _NETWORK_UTILS_LOCAL_H_ */

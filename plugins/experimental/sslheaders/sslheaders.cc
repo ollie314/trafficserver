@@ -17,22 +17,22 @@
  */
 
 #include "sslheaders.h"
+#include "ts/ink_memory.h"
+
 #include <getopt.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
-#include <memory>
-
-static void SslHdrExpand(SSL *, const SslHdrInstance::expansion_list&, TSMBuffer, TSMLoc);
+static void SslHdrExpand(SSL *, const SslHdrInstance::expansion_list &, TSMBuffer, TSMLoc);
 
 static int
-SslHdrExpandRequestHook(TSCont cont, TSEvent event, void * edata)
+SslHdrExpandRequestHook(TSCont cont, TSEvent event, void *edata)
 {
-  const SslHdrInstance * hdr;
+  const SslHdrInstance *hdr;
   TSHttpTxn txn;
   TSMBuffer mbuf;
-  TSMLoc    mhdr;
-  SSL *     ssl;
+  TSMLoc mhdr;
+  SSL *ssl;
 
   txn = (TSHttpTxn)edata;
   hdr = (const SslHdrInstance *)TSContDataGet(cont);
@@ -70,7 +70,7 @@ done:
 }
 
 static void
-SslHdrRemoveHeader(TSMBuffer mbuf, TSMLoc mhdr, const std::string& name)
+SslHdrRemoveHeader(TSMBuffer mbuf, TSMLoc mhdr, const std::string &name)
 {
   TSMLoc field;
   TSMLoc next;
@@ -84,11 +84,11 @@ SslHdrRemoveHeader(TSMBuffer mbuf, TSMLoc mhdr, const std::string& name)
 }
 
 static void
-SslHdrSetHeader(TSMBuffer mbuf, TSMLoc mhdr, const std::string& name, BIO * value)
+SslHdrSetHeader(TSMBuffer mbuf, TSMLoc mhdr, const std::string &name, BIO *value)
 {
   TSMLoc field;
   long vlen;
-  char * vptr;
+  char *vptr;
 
   vlen = BIO_get_mem_data(value, &vptr);
 
@@ -120,15 +120,15 @@ SslHdrSetHeader(TSMBuffer mbuf, TSMLoc mhdr, const std::string& name, BIO * valu
 // so that malicious clients cannot inject bogus information. Otherwise, we populate the header with the
 // expanded value. If the value expands to something empty, we nuke the header.
 static void
-SslHdrExpand(SSL * ssl, const SslHdrInstance::expansion_list& expansions, TSMBuffer mbuf, TSMLoc mhdr)
+SslHdrExpand(SSL *ssl, const SslHdrInstance::expansion_list &expansions, TSMBuffer mbuf, TSMLoc mhdr)
 {
   if (ssl == NULL) {
     for (SslHdrInstance::expansion_list::const_iterator e = expansions.begin(); e != expansions.end(); ++e) {
       SslHdrRemoveHeader(mbuf, mhdr, e->name);
     }
   } else {
-    X509 * x509;
-    BIO * exp = BIO_new(BIO_s_mem());
+    X509 *x509;
+    BIO *exp = BIO_new(BIO_s_mem());
 
     for (SslHdrInstance::expansion_list::const_iterator e = expansions.begin(); e != expansions.end(); ++e) {
       switch (e->scope) {
@@ -164,25 +164,18 @@ SslHdrExpand(SSL * ssl, const SslHdrInstance::expansion_list& expansions, TSMBuf
 }
 
 static SslHdrInstance *
-SslHdrParseOptions(int argc, const char ** argv)
+SslHdrParseOptions(int argc, const char **argv)
 {
-  static const struct option longopt[] =
-  {
-    { const_cast<char *>("attach"), required_argument, 0, 'a' },
-    {0, 0, 0, 0 }
+  static const struct option longopt[] = {
+    {const_cast<char *>("attach"), required_argument, 0, 'a'}, {0, 0, 0, 0},
   };
 
-  std::auto_ptr<SslHdrInstance> hdr(new SslHdrInstance());
-
-  // We might parse arguments multiple times if we are loaded as a global
-  // plugin and a remap plugin. Reset optind so that getopt_long() does the
-  // right thing (ie. work instead of crash).
-  optind = 0;
+  ats_scoped_obj<SslHdrInstance> hdr(new SslHdrInstance());
 
   for (;;) {
     int opt;
 
-    opt = getopt_long(argc, (char * const *)argv, "", longopt, NULL);
+    opt = getopt_long(argc, (char *const *)argv, "", longopt, NULL);
     switch (opt) {
     case 'a':
       if (strcmp(optarg, "client") == 0) {
@@ -192,7 +185,7 @@ SslHdrParseOptions(int argc, const char ** argv)
       } else if (strcmp(optarg, "both") == 0) {
         hdr->attach = SSL_HEADERS_ATTACH_BOTH;
       } else {
-        TSError("%s: invalid attach option '%s'", PLUGIN_NAME, optarg);
+        TSError("[%s] Invalid attach option '%s'", PLUGIN_NAME, optarg);
         return NULL;
       }
 
@@ -200,7 +193,7 @@ SslHdrParseOptions(int argc, const char ** argv)
     }
 
     if (opt == -1) {
-        break;
+      break;
     }
   }
 
@@ -222,13 +215,13 @@ void
 TSPluginInit(int argc, const char *argv[])
 {
   TSPluginRegistrationInfo info;
-  SslHdrInstance * hdr;
+  SslHdrInstance *hdr;
 
-  info.plugin_name = (char *)"sslheaders";
-  info.vendor_name = (char *)"Apache Software Foundation";
+  info.plugin_name   = (char *)"sslheaders";
+  info.vendor_name   = (char *)"Apache Software Foundation";
   info.support_email = (char *)"dev@trafficserver.apache.org";
 
-  if (TSPluginRegister(TS_SDK_VERSION_3_0, &info) != TS_SUCCESS) {
+  if (TSPluginRegister(&info) != TS_SUCCESS) {
     SslHdrError("plugin registration failed");
   }
 
@@ -254,9 +247,9 @@ TSRemapInit(TSRemapInterface * /* api */, char * /* err */, int /* errsz */)
 }
 
 TSReturnCode
-TSRemapNewInstance(int argc, char * argv[], void ** instance, char * /* err */, int /* errsz */)
+TSRemapNewInstance(int argc, char *argv[], void **instance, char * /* err */, int /* errsz */)
 {
-  SslHdrInstance * hdr;
+  SslHdrInstance *hdr;
 
   hdr = SslHdrParseOptions(argc, (const char **)argv);
   if (hdr) {
@@ -268,16 +261,16 @@ TSRemapNewInstance(int argc, char * argv[], void ** instance, char * /* err */, 
 }
 
 void
-TSRemapDeleteInstance(void * instance)
+TSRemapDeleteInstance(void *instance)
 {
-  SslHdrInstance * hdr = (SslHdrInstance *)instance;
+  SslHdrInstance *hdr = (SslHdrInstance *)instance;
   delete hdr;
 }
 
 TSRemapStatus
-TSRemapDoRemap(void * instance, TSHttpTxn txn, TSRemapRequestInfo * /* rri */)
+TSRemapDoRemap(void *instance, TSHttpTxn txn, TSRemapRequestInfo * /* rri */)
 {
-  SslHdrInstance * hdr = (SslHdrInstance *)instance;
+  SslHdrInstance *hdr = (SslHdrInstance *)instance;
 
   switch (hdr->attach) {
   case SSL_HEADERS_ATTACH_SERVER:
@@ -307,5 +300,4 @@ SslHdrInstance::~SslHdrInstance()
 void
 SslHdrInstance::register_hooks()
 {
-
 }

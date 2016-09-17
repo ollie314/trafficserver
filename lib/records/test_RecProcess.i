@@ -21,7 +21,7 @@
   limitations under the License.
  */
 
-#include "ink_hrtime.h"
+#include "ts/ink_hrtime.h"
 #include "P_RecUtils.h"
 #include "test_RecordsConfig.h"
 
@@ -46,7 +46,7 @@ void RecDumpRecordsHt(RecT rec_type);
   do { \
     RecString rec_string = 0; \
     if (RecGetRecordString_Xmalloc("proxy.config.parse_"name, &rec_string) != REC_ERR_FAIL) { \
-      if (rec_string) xfree(rec_string); \
+      if (rec_string) ats_free(rec_string); \
       printf("  parse_"name": FAIL\n"); \
       failures++; \
     } else { \
@@ -64,7 +64,7 @@ void RecDumpRecordsHt(RecT rec_type);
 	printf("  parse_"name": FAIL\n"); \
 	failures++; \
       } \
-      xfree(rec_string); \
+      ats_free(rec_string); \
     } else { \
       printf("  parse_"name": FAIL\n"); \
       failures++; \
@@ -555,60 +555,6 @@ struct DumpRecordsHtCont:public Continuation
     return 0;
   }
 };
-
-//-------------------------------------------------------------------------
-// TreeTest01: 
-//
-//-------------------------------------------------------------------------
-
-void
-TreeTest01()
-{
-  char **var_buf = NULL;
-  int buf_len = 0;
-  RecGetRecordList("proxy.config", &var_buf, &buf_len);
-  for (int i = 0; i < buf_len; i++) {
-    ink_assert(var_buf[i]);
-    diags->print(NULL, DL_Note, NULL, NULL, "\tRecTree node: (proxy.config.*) %s", var_buf[i]);
-  }
-  delete[]var_buf;
-  printf("\n");
-  if (buf_len == 12) {
-    diags->print(NULL, DL_Note, NULL, NULL, "\tRecTree Test -- PASS\n");
-  } else {
-    diags->print(NULL, DL_Note, NULL, NULL, "\tRecTree Test -- FAIL\n");
-  }
-  printf("\n");
-}
-
-
-//-------------------------------------------------------------------------
-// TreeTest02: 
-//
-// This should only run after Test03.
-// Determine whether proxy.process.* variable are referred by the RecTree
-// properly.
-//-------------------------------------------------------------------------
-
-void
-TreeTest02()
-{
-  char **var_buf = NULL;
-  int buf_len = 0;
-  RecGetRecordList("proxy.process", &var_buf, &buf_len);
-  for (int i = 0; i < buf_len; i++) {
-    ink_assert(var_buf[i]);
-    diags->print(NULL, DL_Note, NULL, NULL, "\tRecTree (proxy.process.*) node: %s", var_buf[i]);
-  }
-  delete[]var_buf;
-  printf("\n");
-  if (buf_len == 7) {
-    diags->print(NULL, DL_Note, NULL, NULL, "\tRecTree Test -- PASS\n");
-  } else {
-    diags->print(NULL, DL_Note, NULL, NULL, "\tRecTree Test -- FAIL\n");
-  }
-  printf("\n");
-}
 
 //-------------------------------------------------------------------------
 // main

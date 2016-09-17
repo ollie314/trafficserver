@@ -36,10 +36,9 @@
 #include <unistd.h>
 
 #include "ts/ts.h"
-#include "ink_defs.h"
+#include "ts/ink_defs.h"
 
-typedef struct
-{
+typedef struct {
   TSVIO output_vio;
   TSIOBuffer output_buffer;
   TSIOBufferReader output_reader;
@@ -50,8 +49,8 @@ my_data_alloc()
 {
   MyData *data;
 
-  data = (MyData *) TSmalloc(sizeof(MyData));
-  data->output_vio = NULL;
+  data                = (MyData *)TSmalloc(sizeof(MyData));
+  data->output_vio    = NULL;
   data->output_buffer = NULL;
   data->output_reader = NULL;
 
@@ -59,7 +58,7 @@ my_data_alloc()
 }
 
 static void
-my_data_destroy(MyData * data)
+my_data_destroy(MyData *data)
 {
   if (data) {
     if (data->output_buffer)
@@ -98,11 +97,11 @@ handle_transform(TSCont contp)
    */
   data = TSContDataGet(contp);
   if (!data) {
-    data = my_data_alloc();
+    data                = my_data_alloc();
     data->output_buffer = TSIOBufferCreate();
     data->output_reader = TSIOBufferReaderAlloc(data->output_buffer);
     TSDebug("null-transform", "\tWriting %" PRId64 " bytes on VConn", TSVIONBytesGet(input_vio));
-    //data->output_vio = TSVConnWrite(output_conn, contp, data->output_reader, INT32_MAX);
+    // data->output_vio = TSVConnWrite(output_conn, contp, data->output_reader, INT32_MAX);
     data->output_vio = TSVConnWrite(output_conn, contp, data->output_reader, INT64_MAX);
     // data->output_vio = TSVConnWrite(output_conn, contp, data->output_reader, TSVIONBytesGet(input_vio));
     TSContDataSet(contp, data);
@@ -206,23 +205,21 @@ null_transform(TSCont contp, TSEvent event, void *edata ATS_UNUSED)
     return 0;
   } else {
     switch (event) {
-    case TS_EVENT_ERROR:
-      {
-        TSVIO input_vio;
+    case TS_EVENT_ERROR: {
+      TSVIO input_vio;
 
-        TSDebug("null-transform", "\tEvent is TS_EVENT_ERROR");
-        /* Get the write VIO for the write operation that was
-         * performed on ourself. This VIO contains the continuation of
-         * our parent transformation. This is the input VIO.
-         */
-        input_vio = TSVConnWriteVIOGet(contp);
+      TSDebug("null-transform", "\tEvent is TS_EVENT_ERROR");
+      /* Get the write VIO for the write operation that was
+       * performed on ourself. This VIO contains the continuation of
+       * our parent transformation. This is the input VIO.
+       */
+      input_vio = TSVConnWriteVIOGet(contp);
 
-        /* Call back the write VIO continuation to let it know that we
-         * have completed the write operation.
-         */
-        TSContCall(TSVIOContGet(input_vio), TS_EVENT_ERROR, input_vio);
-      }
-      break;
+      /* Call back the write VIO continuation to let it know that we
+       * have completed the write operation.
+       */
+      TSContCall(TSVIOContGet(input_vio), TS_EVENT_ERROR, input_vio);
+    } break;
     case TS_EVENT_VCONN_WRITE_COMPLETE:
       TSDebug("null-transform", "\tEvent is TS_EVENT_VCONN_WRITE_COMPLETE");
       /* When our output connection says that it has finished
@@ -258,16 +255,14 @@ transformable(TSHttpTxn txnp)
   TSMBuffer bufp;
   TSMLoc hdr_loc;
   TSHttpStatus resp_status;
-  int retv;
+  int retv = 0;
 
   TSDebug("null-transform", "Entering transformable()");
 
-  TSHttpTxnServerRespGet(txnp, &bufp, &hdr_loc);
-  resp_status = TSHttpHdrStatusGet(bufp, hdr_loc);
-  retv = (resp_status == TS_HTTP_STATUS_OK);
-
-  if (TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc) == TS_ERROR) {
-    TSError("[null-transform] Error releasing MLOC while checking " "header status\n");
+  if (TS_SUCCESS == TSHttpTxnServerRespGet(txnp, &bufp, &hdr_loc)) {
+    resp_status = TSHttpHdrStatusGet(bufp, hdr_loc);
+    retv        = (resp_status == TS_HTTP_STATUS_OK);
+    TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdr_loc);
   }
 
   TSDebug("null-transform", "Exiting transformable with return %d", retv);
@@ -287,7 +282,7 @@ transform_add(TSHttpTxn txnp)
 static int
 transform_plugin(TSCont contp ATS_UNUSED, TSEvent event, void *edata)
 {
-  TSHttpTxn txnp = (TSHttpTxn) edata;
+  TSHttpTxn txnp = (TSHttpTxn)edata;
 
   TSDebug("null-transform", "Entering transform_plugin()");
   switch (event) {
@@ -311,12 +306,13 @@ TSPluginInit(int argc ATS_UNUSED, const char *argv[] ATS_UNUSED)
 {
   TSPluginRegistrationInfo info;
 
-  info.plugin_name = "null-transform";
-  info.vendor_name = "MyCompany";
+  info.plugin_name   = "null-transform";
+  info.vendor_name   = "MyCompany";
   info.support_email = "ts-api-support@MyCompany.com";
 
-  if (TSPluginRegister(TS_SDK_VERSION_3_0, &info) != TS_SUCCESS) {
-    TSError("[null-transform] Plugin registration failed.\n");
+  if (TSPluginRegister(&info) != TS_SUCCESS) {
+    TSError("[null-transform] Plugin registration failed.");
+
     goto Lerror;
   }
 
@@ -324,5 +320,5 @@ TSPluginInit(int argc ATS_UNUSED, const char *argv[] ATS_UNUSED)
   return;
 
 Lerror:
-  TSError("[null-tranform] Unable to initialize plugin (disabled).\n");
+  TSError("[null-transform] Unable to initialize plugin (disabled).");
 }

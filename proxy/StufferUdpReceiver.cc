@@ -38,7 +38,11 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define Debug(print) do { if (debug_on) printf print; } while (0)
+#define Debug(print) \
+  do {               \
+    if (debug_on)    \
+      printf print;  \
+  } while (0)
 int debug_on = 0;
 
 #define UDP_BUF_SIZE (64 * 1024)
@@ -48,24 +52,23 @@ int debug_on = 0;
 typedef unsigned int uint32;
 
 /*taken from Prefetch.cc */
-struct prefetch_udp_header
-{
-  //uint32 response_flag:1, last_pkt:1, pkt_no:30;
+struct prefetch_udp_header {
+  // uint32 response_flag:1, last_pkt:1, pkt_no:30;
   uint32_t pkt;
   uint32_t md5[4];
 };
 
-#define RESPONSE_FLAG (1<<31)
-#define LAST_PKT_FLAG (1<<30)
-#define PKT_NUM_MASK ((1<<30)-1)
+#define RESPONSE_FLAG (1 << 31)
+#define LAST_PKT_FLAG (1 << 30)
+#define PKT_NUM_MASK ((1 << 30) - 1)
 
 #define PACKET_HDR_SIZE 20
 
 /* statistics */
-static int number_of_packets_received = 0;
-static int number_of_packets_dropped = 0;
+static int number_of_packets_received  = 0;
+static int number_of_packets_dropped   = 0;
 static int number_of_connections_to_ts = 0;
-static int number_of_timeouts = 0;
+static int number_of_timeouts          = 0;
 
 /* TODO: this functions should be a signal handler ... */
 int
@@ -80,55 +83,52 @@ stufferUdpStatShow()
   return 0;
 }
 
-struct Stream
-{
+struct Stream {
   time_t last_activity_time;
   prefetch_udp_header hdr;
-  int fd;                       //tcp connection
+  int fd; // tcp connection
 
   Stream *next;
 };
 
 class StreamHashTable
 {
-
   Stream **array;
   int size;
-public:
 
-    StreamHashTable(int sz)
+public:
+  StreamHashTable(int sz)
   {
-    size = sz;
+    size  = sz;
     array = new Stream *[size];
     memset(array, 0, size * sizeof(Stream *));
   }
-   ~StreamHashTable()
-  {
-    delete[]array;
-  }
-
-  int index(prefetch_udp_header * hdr)
+  ~StreamHashTable() { delete[] array; }
+  int
+  index(prefetch_udp_header *hdr)
   {
     return hdr->md5[3] % size;
   }
-  Stream **position(prefetch_udp_header * hdr);
-  Stream **position(Stream * s)
+  Stream **position(prefetch_udp_header *hdr);
+  Stream **
+  position(Stream *s)
   {
     return position(&s->hdr);
   }
-  Stream *lookup(prefetch_udp_header * hdr)
+  Stream *
+  lookup(prefetch_udp_header *hdr)
   {
     return *position(hdr);
   }
-  void add(Stream * s);
-  void remove(Stream * s);
+  void add(Stream *s);
+  void remove(Stream *s);
 
   int deleteStaleStreams(time_t now);
 };
 StreamHashTable *stream_hash_table;
 
 Stream **
-StreamHashTable::position(prefetch_udp_header * hdr)
+StreamHashTable::position(prefetch_udp_header *hdr)
 {
   Stream **e = &array[index(hdr)];
 
@@ -142,7 +142,7 @@ StreamHashTable::position(prefetch_udp_header * hdr)
 }
 
 void
-StreamHashTable::add(Stream * s)
+StreamHashTable::add(Stream *s)
 {
   Stream **e = position(s);
   assert(!*e);
@@ -150,7 +150,7 @@ StreamHashTable::add(Stream * s)
 }
 
 void
-StreamHashTable::remove(Stream * s)
+StreamHashTable::remove(Stream *s)
 {
   Stream **e = position(s);
   assert(s == *e);
@@ -161,7 +161,7 @@ int
 StreamHashTable::deleteStaleStreams(time_t now)
 {
   int nremoved = 0;
-  for (int i; i < size; i++) {
+  for (int i = 0; i < size; i++) {
     Stream *&e = array[i];
     while (e) {
       if (e->last_activity_time < now - STREAM_TIMEOUT_SECS) {
@@ -169,7 +169,7 @@ StreamHashTable::deleteStaleStreams(time_t now)
         number_of_timeouts++;
 
         Stream *temp = e;
-        e = e->next;
+        e            = e->next;
         delete temp;
         nremoved++;
       } else
@@ -184,17 +184,17 @@ openTSConn()
 {
   int fd = socket(PF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
-    //perror("socket()");
+    // perror("socket()");
     return -1;
   }
 
   struct sockaddr_in saddr;
   saddr.sin_family = AF_INET;
-  saddr.sin_port = htons(TSPORT);
-//#define INADDR_LOOPBACK ((209<<24)|(131<<16)|(52<<8)|48)
+  saddr.sin_port   = htons(TSPORT);
+  //#define INADDR_LOOPBACK ((209<<24)|(131<<16)|(52<<8)|48)
   saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-  if (connect(fd, (sockaddr *) & saddr, sizeof(saddr)) < 0) {
+  if (connect(fd, (sockaddr *)&saddr, sizeof(saddr)) < 0) {
     perror("connect(TS)");
     close(fd);
     return -1;
@@ -207,21 +207,21 @@ openTSConn()
 int
 processPacket(const char *packet, int pkt_sz)
 {
-  prefetch_udp_header *hdr = (prefetch_udp_header *) packet;
-  uint32_t flags = ntohl(hdr->pkt);
+  prefetch_udp_header *hdr = (prefetch_udp_header *)packet;
+  uint32_t flags           = ntohl(hdr->pkt);
 
   int close_socket = 1;
-  int sock_fd = -1;
+  int sock_fd      = -1;
 
   number_of_packets_received++;
 
   Debug(("Received packet. response_flag : %d last_pkt: %d pkt_no: %d"
-         " (%d)\n", (flags & RESPONSE_FLAG) ? 1 : 0,
-         (flags & RESPONSE_FLAG) && (flags & LAST_PKT_FLAG),
+         " (%d)\n",
+         (flags & RESPONSE_FLAG) ? 1 : 0, (flags & RESPONSE_FLAG) && (flags & LAST_PKT_FLAG),
          (flags & RESPONSE_FLAG) ? flags & PKT_NUM_MASK : 0, ntohl(hdr->pkt)));
 
   if (flags & RESPONSE_FLAG) {
-    Stream *s = stream_hash_table->lookup(hdr);
+    Stream *s       = stream_hash_table->lookup(hdr);
     uint32_t pkt_no = flags & PKT_NUM_MASK;
 
     if (pkt_no == 0 && !(flags & LAST_PKT_FLAG)) {
@@ -229,11 +229,11 @@ processPacket(const char *packet, int pkt_sz)
         number_of_packets_dropped++;
         return -1;
       }
-      s->hdr = *hdr;
-      s->hdr.pkt = pkt_no;
+      s->hdr                = *hdr;
+      s->hdr.pkt            = pkt_no;
       s->last_activity_time = time(NULL);
-      s->next = 0;
-      s->fd = openTSConn();
+      s->next               = 0;
+      s->fd                 = openTSConn();
       if (s->fd < 0) {
         delete s;
         return -1;
@@ -248,7 +248,7 @@ processPacket(const char *packet, int pkt_sz)
         return -1;
 
       s->last_activity_time = time(0);
-      sock_fd = s->fd;
+      sock_fd               = s->fd;
 
       s->hdr.pkt++;
 
@@ -260,9 +260,10 @@ processPacket(const char *packet, int pkt_sz)
 
       if (s->hdr.pkt != pkt_no) {
         Debug(("Received an out of order packet dropping the "
-               "connection expected %d but got %d\n", s->hdr.pkt, pkt_no));
+               "connection expected %d but got %d\n",
+               s->hdr.pkt, pkt_no));
         number_of_packets_dropped++;
-        pkt_sz = 0;             // we dont want to send anything.
+        pkt_sz = 0; // we dont want to send anything.
       }
     }
     packet += PACKET_HDR_SIZE;
@@ -276,9 +277,9 @@ processPacket(const char *packet, int pkt_sz)
         return -1;
     }
 
-    Debug(("Writing %d bytes on socket %d\n", pkt_sz, sock_fd));
+    Debug(("Writing %d bytes on socket %d", pkt_sz, sock_fd));
     while (pkt_sz > 0) {
-      int nsent = write(sock_fd, (char *) packet, pkt_sz);
+      int nsent = write(sock_fd, (char *)packet, pkt_sz);
       if (nsent < 0)
         break;
       packet += nsent;
@@ -303,14 +304,14 @@ main(int argc, char *argv[])
   stream_hash_table = new StreamHashTable(257);
 
   char *pkt_buf = (char *)ats_malloc(UDP_BUF_SIZE);
-  int fd = socket(PF_INET, SOCK_DGRAM, 0);
+  int fd        = socket(PF_INET, SOCK_DGRAM, 0);
 
   struct sockaddr_in saddr;
-  saddr.sin_family = AF_INET;
-  saddr.sin_port = htons(port);
+  saddr.sin_family      = AF_INET;
+  saddr.sin_port        = htons(port);
   saddr.sin_addr.s_addr = INADDR_ANY;
 
-  if ((bind(fd, (struct sockaddr *) &saddr, sizeof(saddr))) < 0) {
+  if ((bind(fd, (struct sockaddr *)&saddr, sizeof(saddr))) < 0) {
     perror("bind(udp_fd)");
     ats_free(pkt_buf);
     return 0;
@@ -323,7 +324,7 @@ main(int argc, char *argv[])
     if (pkt_size < 0)
       return 0;
 
-    Debug(("Processing udp packet (size = %d)\n", pkt_size));
+    Debug(("Processing udp packet (size = %d)", pkt_size));
     processPacket(pkt_buf, pkt_size);
 
     time_t now = time(0);

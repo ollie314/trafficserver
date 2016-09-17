@@ -26,17 +26,21 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <list>
+#include <memory>
 #include "atscppapi/Request.h"
-#include "atscppapi/shared_ptr.h"
 #include "atscppapi/ClientRequest.h"
 #include "atscppapi/Response.h"
-
-namespace atscppapi {
-
+#include "atscppapi/HttpStatus.h"
+#include <ts/apidefs.h>
+namespace atscppapi
+{
 // forward declarations
 class TransactionPlugin;
 struct TransactionState;
-namespace utils { class internal; }
+namespace utils
+{
+  class internal;
+}
 
 /**
  * @brief Transactions are the object containing all the state related to a HTTP Transaction
@@ -45,7 +49,8 @@ namespace utils { class internal; }
  * created and destroyed as they are needed. Transactions should never be saved beyond the
  * scope of the function in which they are delivered otherwise undefined behaviour will result.
  */
-class Transaction: noncopyable {
+class Transaction : noncopyable
+{
 public:
   /**
    * @brief ContextValues are a mechanism to share data between plugins using the atscppapi.
@@ -60,40 +65,46 @@ public:
    *       mydata(int id, string foo) : id_(id), foo_(foo) { }
    *     }
    *
-   *     Transaction.setContextValue("some-key", shared_ptr(new mydata(12, "hello")));
+   *     Transaction.setContextValue("some-key", std::shared_ptr(new mydata(12, "hello")));
    *
    *     // From another plugin you'll have access to this contextual data:
-   *     shared_ptr<Transaction.getContextValue("some-key")
+   *     std::shared_ptr<Transaction.getContextValue("some-key")
    *
    * \endcode
    *
    * Because getContextValue() and setContextValue()
    * take shared pointers you dont have to worry about the cleanup as that will happen automatically so long
-   * as you dont have shared_ptrs that cannot go out of scope.
+   * as you dont have std::shared_ptrs that cannot go out of scope.
    */
-  class ContextValue {
+  class ContextValue
+  {
   public:
-    virtual ~ContextValue() { }
+    virtual ~ContextValue() {}
   };
 
   ~Transaction();
 
   /**
+   * Set the @a event for the currently active hook.
+   */
+  void setEvent(TSEvent event);
+
+  /**
    * Context Values are a way to share data between plugins, the key is always a string
-   * and the value can be a shared_ptr to any type that extends ContextValue.
+   * and the value can be a std::shared_ptr to any type that extends ContextValue.
    * @param key the key to search for.
    * @return Shared pointer that is correctly initialized if the
    *         value existed. It should be checked with .get() != NULL before use.
    */
-  shared_ptr<ContextValue> getContextValue(const std::string &key);
+  std::shared_ptr<ContextValue> getContextValue(const std::string &key);
 
   /**
    * Context Values are a way to share data between plugins, the key is always a string
-   * and the value can be a shared_ptr to any type that extends ContextValue.
+   * and the value can be a std::shared_ptr to any type that extends ContextValue.
    * @param key the key to insert.
    * @param value a shared pointer to a class that extends ContextValue.
    */
-  void setContextValue(const std::string &key, shared_ptr<ContextValue> value);
+  void setContextValue(const std::string &key, std::shared_ptr<ContextValue> value);
 
   /**
    * Causes the Transaction to continue on to other states in the HTTP state machine
@@ -130,6 +141,25 @@ public:
   void setErrorBody(const std::string &content);
 
   /**
+   * Sets the error body page with mimetype.
+   * This method does not advance the state machine to the error state.
+   * To do that you must explicitally call error().
+   *
+   * @param content the error page content.
+   * @param mimetype the error page's content-type.
+   */
+  void setErrorBody(const std::string &content, const std::string &mimetype);
+
+  /**
+   * Sets the status code.
+   * This is usable before transaction has the response of client like a remap state.
+   * A remap logic may advance the state machine to the error state depending on status code.
+   *
+   * @param code the status code.
+   */
+  void setStatusCode(HttpStatus code);
+
+  /**
    * Get the clients address
    * @return The sockaddr structure representing the client's address
    * @see atscppapi::utils::getIpString() in atscppapi/utils.h
@@ -164,7 +194,6 @@ public:
    * @see atscppapi::utils::getIpPortString in atscppapi/utils.h
    */
   const sockaddr *getNextHopAddress() const;
-
 
   /**
    * Set the incoming port on the Transaction
@@ -220,6 +249,20 @@ public:
   Response &getClientResponse();
 
   /**
+   * Returns a Request object which is the cached request
+   *
+   * @return Request object
+   */
+  Request &getCachedRequest();
+
+  /**
+   * Returns a Response object which is the cached response
+   *
+   * @return Response object
+   */
+  Response &getCachedResponse();
+
+  /**
    * Returns the Effective URL for this transaction taking into account host.
    */
   std::string getEffectiveUrl();
@@ -231,13 +274,19 @@ public:
   bool setCacheUrl(const std::string &);
 
   /**
+   * Ability to skip the remap phase of the State Machine
+   * This only really makes sense in TS_HTTP_READ_REQUEST_HDR_HOOK
+   */
+  void setSkipRemapping(int);
+
+  /**
    * The available types of timeouts you can set on a Transaction.
    */
   enum TimeoutType {
-    TIMEOUT_DNS = 0, /**< Timeout on DNS */
-    TIMEOUT_CONNECT, /**< Timeout on Connect */
+    TIMEOUT_DNS = 0,     /**< Timeout on DNS */
+    TIMEOUT_CONNECT,     /**< Timeout on Connect */
     TIMEOUT_NO_ACTIVITY, /**< Timeout on No Activity */
-    TIMEOUT_ACTIVE /**< Timeout with Activity */
+    TIMEOUT_ACTIVE       /**< Timeout with Activity */
   };
 
   /**
@@ -248,6 +297,19 @@ public:
    * @see TimeoutType
    */
   void setTimeout(TimeoutType type, int time_ms);
+
+  /**
+   * Represents different states of an object served out of the cache
+   */
+  enum CacheStatus {
+    CACHE_LOOKUP_MISS = 0,  /**< The object was not found in the cache */
+    CACHE_LOOKUP_HIT_STALE, /**< The object was found in cache but stale */
+    CACHE_LOOKUP_HIT_FRESH, /**< The object was found in cache and was fresh */
+    CACHE_LOOKUP_SKIPED,    /**< Cache lookup was not performed */
+    CACHE_LOOKUP_NONE
+  };
+
+  CacheStatus getCacheStatus();
 
   /**
    * Returns the TSHttpTxn related to the current Transaction
@@ -263,7 +325,6 @@ public:
    * @param TransactionPlugin* the TransactionPlugin that will be now bound to the current Transaction.
    */
   void addPlugin(TransactionPlugin *);
-
 
   /*
    * Note: The following methods cannot be attached to a Response
@@ -301,11 +362,19 @@ public:
   /**
    * Redirect the transaction a different @a url.
    */
-  void redirectTo(std::string const& url);
+  void redirectTo(std::string const &url);
+
+  bool configIntSet(TSOverridableConfigKey conf, int value);
+  bool configIntGet(TSOverridableConfigKey conf, int *value);
+  bool configFloatSet(TSOverridableConfigKey conf, float value);
+  bool configFloatGet(TSOverridableConfigKey conf, float *value);
+  bool configStringSet(TSOverridableConfigKey conf, std::string const &value);
+  bool configStringGet(TSOverridableConfigKey conf, std::string &value);
+  bool configFind(std::string const &name, TSOverridableConfigKey *conf, TSRecordDataType *type);
 
 private:
-  TransactionState *state_; //!< The internal TransactionState object tied to the current Transaction
-  friend class TransactionPlugin; //!< TransactionPlugin is a friend so it can call addPlugin()
+  TransactionState *state_;          //!< The internal TransactionState object tied to the current Transaction
+  friend class TransactionPlugin;    //!< TransactionPlugin is a friend so it can call addPlugin()
   friend class TransformationPlugin; //!< TransformationPlugin is a friend so it can call addPlugin()
 
   /**
@@ -320,21 +389,16 @@ private:
    *
    * @private
    */
-  void initServerRequest();
+  Request &initServerRequest();
 
   /**
-   * Used to initialize the Response object for the Server.
+   * Reset all the transaction handles (for response/requests).
+   * This is used to clear handles that may have gone stale.
    *
    * @private
    */
-  void initServerResponse();
 
-  /**
-   * Used to initialize the Response object for the Client.
-   *
-   * @private
-   */
-  void initClientResponse();
+  void resetHandles();
 
   /**
    * Returns a list of TransactionPlugin pointers bound to the current Transaction

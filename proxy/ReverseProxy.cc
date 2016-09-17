@@ -27,17 +27,15 @@
 
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include <dlfcn.h>
 #include "Main.h"
-#include "Error.h"
 #include "P_EventSystem.h"
-#include "StatSystem.h"
 #include "P_Cache.h"
 #include "ProxyConfig.h"
 #include "ReverseProxy.h"
-#include "MatcherUtils.h"
-#include "Tokenizer.h"
+#include "ts/MatcherUtils.h"
+#include "ts/Tokenizer.h"
 #include "api/ts/remap.h"
 #include "RemapPluginInfo.h"
 #include "RemapProcessor.h"
@@ -45,7 +43,7 @@
 #include "UrlMapping.h"
 
 /** Time till we free the old stuff after a reconfiguration. */
-#define URL_REWRITE_TIMEOUT            (HRTIME_SECOND*60)
+#define URL_REWRITE_TIMEOUT (HRTIME_SECOND * 60)
 
 // Global Ptrs
 static Ptr<ProxyMutex> reconfig_mutex;
@@ -56,10 +54,8 @@ remap_plugin_info *remap_pi_list; // We never reload the remap plugins, just app
 #define FILE_CHANGED 0
 #define REVERSE_CHANGED 1
 #define TSNAME_CHANGED 2
-#define AC_PORT_CHANGED 3
+#define SYNTH_PORT_CHANGED 3
 #define TRANS_CHANGED 4
-#define DEFAULT_TO_PAC_CHANGED 5
-#define DEFAULT_TO_PAC_PORT_CHANGED 7
 #define URL_REMAP_MODE_CHANGED 8
 #define HTTP_DEFAULT_REDIRECT_CHANGED 9
 
@@ -74,23 +70,17 @@ init_reverse_proxy()
 {
   ink_assert(rewrite_table == NULL);
   reconfig_mutex = new_ProxyMutex();
-  rewrite_table = new UrlRewrite();
+  rewrite_table  = new UrlRewrite();
 
   if (!rewrite_table->is_valid()) {
-    Warning("Can not load the remap table, exiting out!");
-    // TODO: For now, I _exit() out of here, because otherwise we'll keep generating
-    // core files (if enabled) when starting up with a bad remap.config file.
-    _exit(-1);
+    Fatal("unable to load remap.config");
   }
 
-  REC_RegisterConfigUpdateFunc("proxy.config.url_remap.filename", url_rewrite_CB, (void *) FILE_CHANGED);
-  REC_RegisterConfigUpdateFunc("proxy.config.proxy_name", url_rewrite_CB, (void *) TSNAME_CHANGED);
-  REC_RegisterConfigUpdateFunc("proxy.config.reverse_proxy.enabled", url_rewrite_CB, (void *) REVERSE_CHANGED);
-  REC_RegisterConfigUpdateFunc("proxy.config.admin.autoconf_port", url_rewrite_CB, (void *) AC_PORT_CHANGED);
-  REC_RegisterConfigUpdateFunc("proxy.config.url_remap.default_to_server_pac", url_rewrite_CB, (void *) DEFAULT_TO_PAC_CHANGED);
-  REC_RegisterConfigUpdateFunc("proxy.config.url_remap.default_to_server_pac_port", url_rewrite_CB, (void *) DEFAULT_TO_PAC_PORT_CHANGED);
-  REC_RegisterConfigUpdateFunc("proxy.config.url_remap.url_remap_mode", url_rewrite_CB, (void *) URL_REMAP_MODE_CHANGED);
-  REC_RegisterConfigUpdateFunc("proxy.config.http.referer_default_redirect", url_rewrite_CB, (void *) HTTP_DEFAULT_REDIRECT_CHANGED);
+  REC_RegisterConfigUpdateFunc("proxy.config.url_remap.filename", url_rewrite_CB, (void *)FILE_CHANGED);
+  REC_RegisterConfigUpdateFunc("proxy.config.proxy_name", url_rewrite_CB, (void *)TSNAME_CHANGED);
+  REC_RegisterConfigUpdateFunc("proxy.config.reverse_proxy.enabled", url_rewrite_CB, (void *)REVERSE_CHANGED);
+  REC_RegisterConfigUpdateFunc("proxy.config.admin.synthetic_port", url_rewrite_CB, (void *)SYNTH_PORT_CHANGED);
+  REC_RegisterConfigUpdateFunc("proxy.config.http.referer_default_redirect", url_rewrite_CB, (void *)HTTP_DEFAULT_REDIRECT_CHANGED);
   return 0;
 }
 
@@ -122,7 +112,6 @@ response_url_remap(HTTPHdr *response_header)
   return rewrite_table ? rewrite_table->ReverseMap(response_header) : false;
 }
 
-
 //
 //
 //  End API Functions
@@ -130,19 +119,18 @@ response_url_remap(HTTPHdr *response_header)
 
 /** Used to read the remap.config file after the manager signals a change. */
 struct UR_UpdateContinuation;
-typedef int (UR_UpdateContinuation::*UR_UpdContHandler) (int, void *);
-struct UR_UpdateContinuation: public Continuation
-{
-  int file_update_handler(int /* etype ATS_UNUSED */, void * /* data ATS_UNUSED */)
+typedef int (UR_UpdateContinuation::*UR_UpdContHandler)(int, void *);
+struct UR_UpdateContinuation : public Continuation {
+  int
+  file_update_handler(int /* etype ATS_UNUSED */, void * /* data ATS_UNUSED */)
   {
-    reloadUrlRewrite();
+    (void)reloadUrlRewrite();
     delete this;
     return EVENT_DONE;
   }
-  UR_UpdateContinuation(ProxyMutex * m)
-    : Continuation(m)
+  UR_UpdateContinuation(Ptr<ProxyMutex> &m) : Continuation(m)
   {
-    SET_HANDLER((UR_UpdContHandler) & UR_UpdateContinuation::file_update_handler);
+    SET_HANDLER((UR_UpdContHandler)&UR_UpdateContinuation::file_update_handler);
   }
 };
 
@@ -152,7 +140,7 @@ struct UR_UpdateContinuation: public Continuation
   blocking.
 
 */
-void
+bool
 reloadUrlRewrite()
 {
   UrlRewrite *newTable;
@@ -163,18 +151,20 @@ reloadUrlRewrite()
     new_Deleter(rewrite_table, URL_REWRITE_TIMEOUT);
     Debug("url_rewrite", "remap.config done reloading!");
     ink_atomic_swap(&rewrite_table, newTable);
+    return true;
   } else {
-    static const char* msg = "failed to reload remap.config, not replacing!";
+    static const char *msg = "failed to reload remap.config, not replacing!";
     delete newTable;
     Debug("url_rewrite", "%s", msg);
     Warning("%s", msg);
+    return false;
   }
 }
 
 int
 url_rewrite_CB(const char * /* name ATS_UNUSED */, RecDataT /* data_type ATS_UNUSED */, RecData data, void *cookie)
 {
-  int my_token = (int) (long) cookie;
+  int my_token = (int)(long)cookie;
 
   switch (my_token) {
   case REVERSE_CHANGED:
@@ -182,14 +172,12 @@ url_rewrite_CB(const char * /* name ATS_UNUSED */, RecDataT /* data_type ATS_UNU
     break;
 
   case TSNAME_CHANGED:
-  case DEFAULT_TO_PAC_CHANGED:
-  case DEFAULT_TO_PAC_PORT_CHANGED:
   case FILE_CHANGED:
   case HTTP_DEFAULT_REDIRECT_CHANGED:
     eventProcessor.schedule_imm(new UR_UpdateContinuation(reconfig_mutex), ET_TASK);
     break;
 
-  case AC_PORT_CHANGED:
+  case SYNTH_PORT_CHANGED:
     // The AutoConf port does not current change on manager except at restart
     break;
 
@@ -204,4 +192,3 @@ url_rewrite_CB(const char * /* name ATS_UNUSED */, RecDataT /* data_type ATS_UNU
 
   return 0;
 }
-

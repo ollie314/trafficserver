@@ -23,7 +23,7 @@
 
 #include "HttpNet.h"
 #include <iostream.h>
-#include "ink_assert.h"
+#include "ts/ink_assert.h"
 #include "DebugStream.h"
 #include "IOBuffer.h"
 #include "Main.h"
@@ -37,12 +37,7 @@ HttpNetProcessor httpNetProcessor;
 HttpConfigParams httpConfigParams;
 DebugStream debug_out("debug.txt", 1, 1, "DebugStreamLevels.txt", "http.stops");
 
-
-
-
-
-typedef struct
-{
+typedef struct {
   char *accept;
   char *field;
 } AcceptPair;
@@ -54,11 +49,7 @@ test()
 
   ///// Accept /////
 
-  static AcceptPair a1[] = {
-    {"*", "text/html"},
-    {"image/gif, *; q=.9, text/*; q=.2", "text/html"},
-    {NULL, NULL}
-  };
+  static AcceptPair a1[] = {{"*", "text/html"}, {"image/gif, *; q=.9, text/*; q=.2", "text/html"}, {NULL, NULL}};
 
   fprintf(stderr, "\n*** Testing Accept matching ***\n");
   for (int i = 0; a1[i].accept; i++) {
@@ -68,10 +59,7 @@ test()
 
   ///// Accept-Charset /////
 
-  static AcceptPair a2[] = {
-    {"*", "us-ascii"},
-    {NULL, NULL}
-  };
+  static AcceptPair a2[] = {{"*", "us-ascii"}, {NULL, NULL}};
 
   fprintf(stderr, "\n*** Testing Accept-Charset matching ***\n");
   for (int i = 0; a2[i].accept; i++) {
@@ -81,10 +69,7 @@ test()
 
   ///// Accept-Encoding /////
 
-  static AcceptPair a3[] = {
-    {"*", "gzip"},
-    {NULL, NULL}
-  };
+  static AcceptPair a3[] = {{"*", "gzip"}, {NULL, NULL}};
 
   fprintf(stderr, "\n*** Testing Accept-Encoding matching ***\n");
   for (int i = 0; a3[i].accept; i++) {
@@ -94,15 +79,13 @@ test()
 
   ///// Accept-Language /////
 
-  static AcceptPair a4[] = {
-    {"*", "en"},
-    {"*", ""},
-    {"fr, en", "en-ebonics"},
-    {"fr, en-ebonics", "en-ebonics"},
-    {"fr, *;q=.314, en-ebonics", "en-boston"},
-    {"fr, *;q=.314, en-ebonics", "en-ebonics-oakland"},
-    {NULL, NULL}
-  };
+  static AcceptPair a4[] = {{"*", "en"},
+                            {"*", ""},
+                            {"fr, en", "en-ebonics"},
+                            {"fr, en-ebonics", "en-ebonics"},
+                            {"fr, *;q=.314, en-ebonics", "en-boston"},
+                            {"fr, *;q=.314, en-ebonics", "en-ebonics-oakland"},
+                            {NULL, NULL}};
 
   fprintf(stderr, "\n*** Testing Accept-Language matching ***\n");
   for (int i = 0; a4[i].accept; i++) {

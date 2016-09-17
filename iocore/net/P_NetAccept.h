@@ -39,9 +39,8 @@
 #ifndef __P_NETACCEPT_H__
 #define __P_NETACCEPT_H__
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_Connection.h"
-
 
 struct NetAccept;
 class Event;
@@ -50,42 +49,39 @@ class Event;
 //   Accepts as many connections as possible, returning the number accepted
 //   or -1 to stop accepting.
 //
-typedef int (AcceptFunction) (NetAccept * na, void *e, bool blockable);
+typedef int(AcceptFunction)(NetAccept *na, void *e, bool blockable);
 typedef AcceptFunction *AcceptFunctionPtr;
 AcceptFunction net_accept;
 
 class UnixNetVConnection;
 
 // TODO fix race between cancel accept and call back
-struct NetAcceptAction:public Action, public RefCountObj
-{
+struct NetAcceptAction : public Action, public RefCountObj {
   Server *server;
 
-  void cancel(Continuation * cont = NULL) {
+  void
+  cancel(Continuation *cont = NULL)
+  {
     Action::cancel(cont);
     server->close();
   }
 
-  Continuation *operator =(Continuation * acont)
+  Continuation *
+  operator=(Continuation *acont)
   {
     return Action::operator=(acont);
   }
 
-  ~NetAcceptAction() {
-    Debug("net_accept", "NetAcceptAction dying\n");
-  }
+  ~NetAcceptAction() { Debug("net_accept", "NetAcceptAction dying"); }
 };
-
 
 //
 // NetAccept
 // Handles accepting connections.
 //
-struct NetAccept:public Continuation
-{
+struct NetAccept : public Continuation {
   ink_hrtime period;
   Server server;
-  void *alloc_cache;
   AcceptFunctionPtr accept_fn;
   int ifd;
   bool callback_on_open;
@@ -100,28 +96,23 @@ struct NetAccept:public Continuation
   UnixNetVConnection *epoll_vc; // only storage for epoll events
   EventIO ep;
 
-  virtual EventType getEtype() const;
-  virtual NetProcessor * getNetProcessor() const;
+  virtual NetProcessor *getNetProcessor() const;
 
   void init_accept_loop(const char *);
-  virtual void init_accept(EThread * t = NULL);
-  virtual void init_accept_per_thread();
+  virtual void init_accept(EThread *t = NULL, bool isTransparent = false);
+  virtual void init_accept_per_thread(bool isTransparent);
   virtual NetAccept *clone() const;
   // 0 == success
   int do_listen(bool non_blocking, bool transparent = false);
 
-  int do_blocking_accept(EThread * t);
+  int do_blocking_accept(EThread *t);
   virtual int acceptEvent(int event, void *e);
   virtual int acceptFastEvent(int event, void *e);
-  int acceptLoopEvent(int event, Event * e);
+  int acceptLoopEvent(int event, Event *e);
   void cancel();
 
   NetAccept();
-  virtual ~ NetAccept()
-  {
-    action_ = NULL;
-  };
+  virtual ~NetAccept() { action_ = NULL; };
 };
-
 
 #endif

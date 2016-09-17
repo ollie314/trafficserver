@@ -28,7 +28,6 @@
 #include <string.h>
 #include <arpa/inet.h>
 
-
 char sendBuff[] = "I'm Alive.";
 
 FILE *fp;
@@ -40,14 +39,13 @@ UDPClientTestInit()
   unsigned long ip;
   TSMutex readMutexp;
 
-  ip = inet_addr("209.131.48.79");
+  ip         = inet_addr("209.131.48.79");
   readMutexp = TSMutexCreate();
-  cont = TSContCreate(&UDPClient_handle_callbacks, readMutexp);
-  fp = fopen("UDPAPI.dbg", "a+");
+  cont       = TSContCreate(&UDPClient_handle_callbacks, readMutexp);
+  fp         = fopen("UDPAPI.dbg", "a+");
   fprintf(fp, "UDPClient Init called\n");
   fclose(fp);
   INKUDPBind(cont, ip, 9999);
-
 }
 
 int
@@ -57,7 +55,7 @@ UDPClient_handle_callbacks(TSCont cont, TSEvent event, void *e)
   INKUDPPacket packet;
   TSIOBufferBlock recvBuffBlock;
   unsigned int destIp = inet_addr("209.131.48.79");
-  int destPort = 1813;
+  int destPort        = 1813;
   INKUDPConn UDPConn;
   TSIOBufferReader reader;
   TSIOBuffer iobuffer;
@@ -67,34 +65,31 @@ UDPClient_handle_callbacks(TSCont cont, TSEvent event, void *e)
   fp = fopen("UDPAPI.dbg", "a+");
 
   switch (event) {
-
   case TS_NET_EVENT_DATAGRAM_OPEN:
-    UDPConn = (INKUDPConn) e;
+    UDPConn = (INKUDPConn)e;
     INKUDPRecvFrom(cont, UDPConn);
     INKUDPSendTo(cont, UDPConn, destIp, destPort, sendBuff, strlen(sendBuff));
-    fprintf(fp, "sent %s\n.", (const char *) sendBuff);
+    fprintf(fp, "sent %s\n.", (const char *)sendBuff);
 
     break;
 
   case TS_NET_EVENT_DATAGRAM_READ_READY:
     fprintf(fp, "read ready called\n.");
-    packetQueue = (INKUDPacketQueue) e;
+    packetQueue = (INKUDPacketQueue)e;
 
     while ((packet = INKUDPPacketGet(packetQueue)) != NULL) {
       recvBuffBlock = INKUDPPacketBufferBlockGet(packet);
 
       iobuffer = TSIOBufferCreate();
-      reader = TSIOBufferReaderAlloc(iobuffer);
+      reader   = TSIOBufferReaderAlloc(iobuffer);
       TSIOBufferAppend(iobuffer, recvBuffBlock);
       buf = TSIOBufferBlockReadStart(recvBuffBlock, reader, &avail);
 
       if (avail > 0) {
-
         for (int i = 0; i < avail; i++)
           fprintf(fp, "%c", *(buf + i));
 
-
-        memcpy((char *) &recvBuff + total_len, buf, avail);
+        memcpy((char *)&recvBuff + total_len, buf, avail);
         TSIOBufferReaderConsume(reader, avail);
         total_len += avail;
       }
@@ -109,7 +104,6 @@ UDPClient_handle_callbacks(TSCont cont, TSEvent event, void *e)
 
   case TS_NET_EVENT_DATAGRAM_WRITE_COMPLETE:
     break;
-
   }
   fclose(fp);
   return TS_EVENT_CONTINUE;

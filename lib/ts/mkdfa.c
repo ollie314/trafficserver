@@ -27,34 +27,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SIZEOF(t) (sizeof (t) / (sizeof ((t)[0])))
-
+#define SIZEOF(t) (sizeof(t) / (sizeof((t)[0])))
 
 typedef struct _info_t info_t;
 typedef struct _state_t state_t;
 typedef struct _transition_t transition_t;
 
-struct _info_t
-{
+struct _info_t {
   const char *name;
   const char *value;
   int namelen;
 };
 
-struct _state_t
-{
+struct _state_t {
   int num;
   const char *value;
   transition_t *transitions;
 };
 
-struct _transition_t
-{
+struct _transition_t {
   int value;
   state_t *state;
   transition_t *next;
 };
-
 
 info_t fields[] = {
   {"Accept", "MIME_FIELD_ACCEPT", 0},
@@ -127,32 +122,17 @@ info_t fields[] = {
 };
 
 info_t schemes[] = {
-  {"file", "URL_SCHEME_FILE", 0},
-  {"ftp", "URL_SCHEME_FTP", 0},
-  {"gopher", "URL_SCHEME_GOPHER", 0},
-  {"http", "URL_SCHEME_HTTP", 0},
-  {"https", "URL_SCHEME_HTTPS", 0},
-  {"mailto", "URL_SCHEME_MAILTO", 0},
-  {"news", "URL_SCHEME_NEWS", 0},
-  {"nntp", "URL_SCHEME_NNTP", 0},
-  {"prospero", "URL_SCHEME_PROSPERO", 0},
-  {"telnet", "URL_SCHEME_TELNET", 0},
-  {"wais", "URL_SCHEME_WAIS", 0},
-  {NULL, "URL_SCHEME_NONE", 0},
+  {"file", "URL_SCHEME_FILE", 0},     {"ftp", "URL_SCHEME_FTP", 0},     {"gopher", "URL_SCHEME_GOPHER", 0},
+  {"http", "URL_SCHEME_HTTP", 0},     {"https", "URL_SCHEME_HTTPS", 0}, {"mailto", "URL_SCHEME_MAILTO", 0},
+  {"news", "URL_SCHEME_NEWS", 0},     {"nntp", "URL_SCHEME_NNTP", 0},   {"prospero", "URL_SCHEME_PROSPERO", 0},
+  {"telnet", "URL_SCHEME_TELNET", 0}, {"wais", "URL_SCHEME_WAIS", 0},   {NULL, "URL_SCHEME_NONE", 0},
 };
 
 info_t methods[] = {
-  {"CONNECT", "HTTP_METHOD_CONNECT", -1},
-  {"DELETE", "HTTP_METHOD_DELETE", -1},
-  {"GET", "HTTP_METHOD_GET", -1},
-  {"HEAD", "HTTP_METHOD_HEAD", -1},
-  {"HTTP/", "HTTP_METHOD_HTTP", -1},
-  {"OPTIONS", "HTTP_METHOD_OPTIONS", -1},
-  {"POST", "HTTP_METHOD_POST", -1},
-  {"PURGE", "HTTP_METHOD_PURGE", -1},
-  {"PUT", "HTTP_METHOD_PUT", -1},
-  {"TRACE", "HTTP_METHOD_TRACE", -1},
-  {NULL, "HTTP_METHOD_NONE", 0},
+  {"CONNECT", "HTTP_METHOD_CONNECT", -1}, {"DELETE", "HTTP_METHOD_DELETE", -1}, {"GET", "HTTP_METHOD_GET", -1},
+  {"HEAD", "HTTP_METHOD_HEAD", -1},       {"HTTP/", "HTTP_METHOD_HTTP", -1},    {"OPTIONS", "HTTP_METHOD_OPTIONS", -1},
+  {"POST", "HTTP_METHOD_POST", -1},       {"PURGE", "HTTP_METHOD_PURGE", -1},   {"PUT", "HTTP_METHOD_PUT", -1},
+  {"TRACE", "HTTP_METHOD_TRACE", -1},     {NULL, "HTTP_METHOD_NONE", 0},
 };
 
 info_t statuses[] = {
@@ -197,37 +177,16 @@ info_t statuses[] = {
 };
 
 info_t days[] = {
-  {"Fri", "FRIDAY", -1},
-  {"Friday", "FRIDAY", -1},
-  {"Mon", "MONDAY", -1},
-  {"Monday", "MONDAY", -1},
-  {"Sat", "SATURDAY", -1},
-  {"Saturday", "SATURDAY", -1},
-  {"Sun", "SUNDAY", -1},
-  {"Sunday", "SUNDAY", -1},
-  {"Thu", "THURSDAY", -1},
-  {"Thursday", "THURSDAY", -1},
-  {"Tue", "TUESDAY", -1},
-  {"Tuesday", "TUESDAY", -1},
-  {"Wed", "WEDNESDAY", -1},
-  {"Wednesday", "WEDNESDAY", -1},
-  {NULL, "UNKNOWN_DAY", -1},
+  {"Fri", "FRIDAY", -1},    {"Friday", "FRIDAY", -1},       {"Mon", "MONDAY", -1},     {"Monday", "MONDAY", -1},
+  {"Sat", "SATURDAY", -1},  {"Saturday", "SATURDAY", -1},   {"Sun", "SUNDAY", -1},     {"Sunday", "SUNDAY", -1},
+  {"Thu", "THURSDAY", -1},  {"Thursday", "THURSDAY", -1},   {"Tue", "TUESDAY", -1},    {"Tuesday", "TUESDAY", -1},
+  {"Wed", "WEDNESDAY", -1}, {"Wednesday", "WEDNESDAY", -1}, {NULL, "UNKNOWN_DAY", -1},
 };
 
 info_t months[] = {
-  {"Apr", "APRIL", -1},
-  {"Aug", "AUGUST", -1},
-  {"Dec", "DECEMBER", -1},
-  {"Feb", "FEBRUARY", -1},
-  {"Jan", "JANUARY", -1},
-  {"Jul", "JULY", -1},
-  {"Jun", "JUNE", -1},
-  {"Mar", "MARCH", -1},
-  {"May", "MAY", -1},
-  {"Nov", "NOVEMBER", -1},
-  {"Oct", "OCTOBER", -1},
-  {"Sep", "SEPTEMBER", -1},
-  {NULL, "UNKNOWN_MONTH", -1},
+  {"Apr", "APRIL", -1},   {"Aug", "AUGUST", -1},    {"Dec", "DECEMBER", -1},     {"Feb", "FEBRUARY", -1}, {"Jan", "JANUARY", -1},
+  {"Jul", "JULY", -1},    {"Jun", "JUNE", -1},      {"Mar", "MARCH", -1},        {"May", "MAY", -1},      {"Nov", "NOVEMBER", -1},
+  {"Oct", "OCTOBER", -1}, {"Sep", "SEPTEMBER", -1}, {NULL, "UNKNOWN_MONTH", -1},
 };
 
 info_t connections[] = {
@@ -252,26 +211,24 @@ info_t cache_controls[] = {
   {NULL, "HTTP_CACHE_DIRECTIVE_CACHE_EXTENSION", -1},
 };
 
-
-state_t *start = NULL;
+state_t *start  = NULL;
 int state_count = 0;
 
-int *map = NULL;
-int *basetbl = NULL;
-int *nexttbl = NULL;
-int *checktbl = NULL;
+int *map               = NULL;
+int *basetbl           = NULL;
+int *nexttbl           = NULL;
+int *checktbl          = NULL;
 const char **accepttbl = NULL;
-char **prefixtbl = NULL;
-
+char **prefixtbl       = NULL;
 
 state_t *
 mkstate()
 {
   state_t *state;
 
-  state = (state_t *) malloc(sizeof(state_t));
-  state->num = state_count++;
-  state->value = NULL;
+  state              = (state_t *)malloc(sizeof(state_t));
+  state->num         = state_count++;
+  state->value       = NULL;
   state->transitions = NULL;
 
   return state;
@@ -282,16 +239,16 @@ mktransition()
 {
   transition_t *transition;
 
-  transition = (transition_t *) malloc(sizeof(transition_t));
+  transition        = (transition_t *)malloc(sizeof(transition_t));
   transition->value = 0;
   transition->state = NULL;
-  transition->next = NULL;
+  transition->next  = NULL;
 
   return transition;
 }
 
 void
-prstate(state_t * state)
+prstate(state_t *state)
 {
   transition_t *transitions;
 
@@ -315,7 +272,7 @@ prstate(state_t * state)
 }
 
 void
-add_states(state_t * state, info_t * info, int pos)
+add_states(state_t *state, info_t *info, int pos)
 {
   transition_t *transitions;
 
@@ -342,9 +299,9 @@ add_states(state_t * state, info_t * info, int pos)
       transitions = transitions->next;
 
     transitions->next = mktransition();
-    transitions = transitions->next;
+    transitions       = transitions->next;
   } else {
-    transitions = mktransition();
+    transitions        = mktransition();
     state->transitions = transitions;
   }
 
@@ -378,7 +335,7 @@ prtable(const char *type, const char *name, int *table, int size)
 }
 
 int
-mkmap(state_t * state)
+mkmap(state_t *state)
 {
   static int count = 1;
 
@@ -401,7 +358,7 @@ mkmap(state_t * state)
 }
 
 void
-mkaccept(state_t * state, const char *defvalue)
+mkaccept(state_t *state, const char *defvalue)
 {
   transition_t *transitions;
 
@@ -418,11 +375,11 @@ mkaccept(state_t * state, const char *defvalue)
 }
 
 void
-mkprefix(state_t * state, char *prefix, int length)
+mkprefix(state_t *state, char *prefix, int length)
 {
   transition_t *transitions;
 
-  prefixtbl[state->num] = (char *) malloc(sizeof(char) * (length + 1));
+  prefixtbl[state->num] = (char *)malloc(sizeof(char) * (length + 1));
   strncpy(prefixtbl[state->num], prefix, length);
   prefixtbl[state->num][length] = '\0';
 
@@ -435,7 +392,7 @@ mkprefix(state_t * state, char *prefix, int length)
 }
 
 int
-checkbase(state_t * state, int base)
+checkbase(state_t *state, int base)
 {
   transition_t *transitions;
 
@@ -450,7 +407,7 @@ checkbase(state_t * state, int base)
 }
 
 void
-mktranstables(state_t * state)
+mktranstables(state_t *state)
 {
   transition_t *transitions;
   int base;
@@ -471,8 +428,8 @@ mktranstables(state_t * state)
     assert(checktbl[basetbl[state->num] + map[transitions->value]] == -1);
 
     checktbl[basetbl[state->num] + map[transitions->value]] = state->num;
-    nexttbl[basetbl[state->num] + map[transitions->value]] = transitions->state->num;
-    transitions = transitions->next;
+    nexttbl[basetbl[state->num] + map[transitions->value]]  = transitions->state->num;
+    transitions                                             = transitions->next;
   }
 
   transitions = state->transitions;
@@ -483,15 +440,15 @@ mktranstables(state_t * state)
 }
 
 void
-mktables(state_t * state, const char *defvalue, int useprefix)
+mktables(state_t *state, const char *defvalue, int useprefix)
 {
   char prefix[1024];
   int char_count;
   int i;
 
   /* make the character map */
-  map = (int *) malloc(sizeof(int) * 256);
-  for (i = 0; i < 256; i++)
+  map = (int *)malloc(sizeof(int) * 256);
+  for (i   = 0; i < 256; i++)
     map[i] = 0;
 
   char_count = mkmap(state);
@@ -500,8 +457,8 @@ mktables(state_t * state, const char *defvalue, int useprefix)
   printf("\n");
 
   /* make the accept state table */
-  accepttbl = (const char **) malloc(sizeof(const char *) * state_count);
-  for (i = 0; i < state_count; i++)
+  accepttbl = (const char **)malloc(sizeof(const char *) * state_count);
+  for (i         = 0; i < state_count; i++)
     accepttbl[i] = NULL;
 
   mkaccept(state, defvalue);
@@ -517,8 +474,8 @@ mktables(state_t * state, const char *defvalue, int useprefix)
 
   /* make the prefix table */
   if (useprefix) {
-    prefixtbl = (char **) malloc(sizeof(char *) * state_count);
-    for (i = 0; i < state_count; i++)
+    prefixtbl = (char **)malloc(sizeof(char *) * state_count);
+    for (i         = 0; i < state_count; i++)
       prefixtbl[i] = NULL;
 
     mkprefix(state, prefix, 0);
@@ -535,16 +492,16 @@ mktables(state_t * state, const char *defvalue, int useprefix)
 
   /* make the state transition tables */
 
-  basetbl = (int *) malloc(sizeof(int) * state_count);
-  nexttbl = (int *) malloc(sizeof(int) * (state_count + char_count));
-  checktbl = (int *) malloc(sizeof(int) * (state_count + char_count));
+  basetbl  = (int *)malloc(sizeof(int) * state_count);
+  nexttbl  = (int *)malloc(sizeof(int) * (state_count + char_count));
+  checktbl = (int *)malloc(sizeof(int) * (state_count + char_count));
 
   for (i = 0; i < state_count; i++) {
     basetbl[i] = -1;
   }
 
   for (i = 0; i < (state_count + char_count); i++) {
-    nexttbl[i] = 0;
+    nexttbl[i]  = 0;
     checktbl[i] = -1;
   }
 
@@ -565,10 +522,10 @@ rundfa(const char *buf, int length)
   int ch, tmp;
 
   state = 0;
-  end = buf + length;
+  end   = buf + length;
 
   while (buf != end) {
-    ch = map[(int) *buf++];
+    ch = map[(int)*buf++];
 
     tmp = basetbl[state] + ch;
     if (checktbl[tmp] != state)
@@ -580,7 +537,7 @@ rundfa(const char *buf, int length)
 }
 
 void
-mkdfa(info_t * infos, int ninfos, int useprefix, int debug)
+mkdfa(info_t *infos, int ninfos, int useprefix, int debug)
 {
   /*
      static const char *names[] =
@@ -599,7 +556,7 @@ mkdfa(info_t * infos, int ninfos, int useprefix, int debug)
 
   start = mkstate();
 
-  for (i = 0; i < (ninfos - 1); i++)
+  for (i             = 0; i < (ninfos - 1); i++)
     infos[i].namelen = strlen(infos[i].name);
 
   for (i = 0; i < (ninfos - 1); i++)

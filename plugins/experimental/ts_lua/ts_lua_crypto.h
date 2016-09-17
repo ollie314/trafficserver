@@ -16,12 +16,11 @@
   limitations under the License.
 */
 
-
 #ifndef _TS_LUA_CRYPTO_H
 #define _TS_LUA_CRYPTO_H
 
 #include "ts_lua_common.h"
 
-void ts_lua_inject_crypto_api(lua_State * L);
+void ts_lua_inject_crypto_api(lua_State *L);
 
 #endif

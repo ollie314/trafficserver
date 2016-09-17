@@ -22,23 +22,23 @@
 #ifndef __HASH_MD5_H__
 #define __HASH_MD5_H__
 
-#include "Hash.h"
+#include "ts/Hash.h"
 #include <openssl/evp.h>
 
 struct ATSHashMD5 : ATSHash {
-    ATSHashMD5(void);
-    void update(const void *data, size_t len);
-    void final(void);
-    const void *get(void) const;
-    size_t size(void) const;
-    void clear(void);
-    ~ATSHashMD5();
+  ATSHashMD5(void);
+  void update(const void *data, size_t len);
+  void final(void);
+  const void *get(void) const;
+  size_t size(void) const;
+  void clear(void);
+  ~ATSHashMD5();
 
 private:
-    EVP_MD_CTX ctx;
-    unsigned char md_value[EVP_MAX_MD_SIZE];
-    unsigned int md_len;
-    bool finalized;
+  EVP_MD_CTX *ctx;
+  unsigned char md_value[EVP_MAX_MD_SIZE];
+  unsigned int md_len;
+  bool finalized;
 };
 
 #endif

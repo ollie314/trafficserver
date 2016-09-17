@@ -21,68 +21,131 @@
   limitations under the License.
  */
 
-
 #ifndef GZIP_CONFIGURATION_H_
 #define GZIP_CONFIGURATION_H_
 
 #include <string>
 #include <vector>
 #include "debug_macros.h"
+#include "ts/ink_atomic.h"
 
-namespace Gzip  {
-  class HostConfiguration {
-  public: //todo -> only configuration should be able to construct hostconfig
-    explicit HostConfiguration(const std::string & host)
-      : host_(host)
-      , enabled_(true)
-      , cache_(true)
-      , remove_accept_encoding_(false)
-      , flush_(false)
-    {}
+namespace Gzip
+{
+typedef std::vector<std::string> StringContainer;
 
-    inline bool enabled() { return enabled_; }
-    inline void set_enabled(bool x) { enabled_ = x; }
-    inline bool cache() { return cache_; }
-    inline void set_cache(bool x) { cache_ = x; }
-    inline bool flush() { return flush_; }
-    inline void set_flush(bool x) { flush_ = x; }
-    inline bool remove_accept_encoding() { return remove_accept_encoding_; }
-    inline void set_remove_accept_encoding(bool x) { remove_accept_encoding_ = x; }
-    inline std::string host() { return host_; }
-    void add_disallow(const std::string & disallow);
-    void add_compressible_content_type(const std::string & content_type);
-    bool IsUrlAllowed(const char * url, int url_len);
-    bool ContentTypeIsCompressible(const char * content_type, int content_type_length);
+class HostConfiguration
+{
+public:
+  explicit HostConfiguration(const std::string &host)
+    : host_(host), enabled_(true), cache_(true), remove_accept_encoding_(false), flush_(false), ref_count_(0)
+  {
+  }
 
-  private:
-    std::string host_;
-    bool enabled_;
-    bool cache_;
-    bool remove_accept_encoding_;
-    bool flush_;
-    std::vector<std::string> compressible_content_types_;
-    std::vector<std::string> disallows_;
-    DISALLOW_COPY_AND_ASSIGN(HostConfiguration);
-  };//class HostConfiguration
+  bool
+  enabled()
+  {
+    return enabled_;
+  }
+  void
+  set_enabled(bool x)
+  {
+    enabled_ = x;
+  }
+  bool
+  cache()
+  {
+    return cache_;
+  }
+  void
+  set_cache(bool x)
+  {
+    cache_ = x;
+  }
+  bool
+  flush()
+  {
+    return flush_;
+  }
+  void
+  set_flush(bool x)
+  {
+    flush_ = x;
+  }
+  bool
+  remove_accept_encoding()
+  {
+    return remove_accept_encoding_;
+  }
+  void
+  set_remove_accept_encoding(bool x)
+  {
+    remove_accept_encoding_ = x;
+  }
+  std::string
+  host()
+  {
+    return host_;
+  }
+  bool
+  has_disallows() const
+  {
+    return !disallows_.empty();
+  }
 
-  class Configuration {
-    friend class HostConfiguration;
-  public:
-    static Configuration * Parse(const char * path);
-    HostConfiguration * Find(const char * host, int host_length);
-    inline HostConfiguration * GlobalConfiguration() {
-      return host_configurations_[0];
+  void add_disallow(const std::string &disallow);
+  void add_compressible_content_type(const std::string &content_type);
+  bool is_url_allowed(const char *url, int url_len);
+  bool is_content_type_compressible(const char *content_type, int content_type_length);
+
+  // Ref-counting these host configuration objects
+  void
+  hold()
+  {
+    ink_atomic_increment(&ref_count_, 1);
+  }
+  void
+  release()
+  {
+    if (1 >= ink_atomic_decrement(&ref_count_, 1)) {
+      debug("released and deleting HostConfiguration for %s settings", host_.size() > 0 ? host_.c_str() : "global");
+      delete this;
     }
+  }
 
-  private:
-    explicit Configuration()  {}
-    void AddHostConfiguration(HostConfiguration * hc);
+private:
+  std::string host_;
+  bool enabled_;
+  bool cache_;
+  bool remove_accept_encoding_;
+  bool flush_;
+  volatile int ref_count_;
 
-    std::vector<HostConfiguration *> host_configurations_;
-    //todo: destructor. delete owned host configurations
-    DISALLOW_COPY_AND_ASSIGN(Configuration);
-  }; //class Configuration
+  StringContainer compressible_content_types_;
+  StringContainer disallows_;
 
-}//namespace
+  DISALLOW_COPY_AND_ASSIGN(HostConfiguration);
+};
+
+typedef std::vector<HostConfiguration *> HostContainer;
+
+class Configuration
+{
+  friend class HostConfiguration;
+
+public:
+  static Configuration *Parse(const char *path);
+  HostConfiguration *find(const char *host, int host_length);
+  void release_all();
+
+private:
+  explicit Configuration() {}
+  void add_host_configuration(HostConfiguration *hc);
+
+  HostContainer host_configurations_;
+
+  DISALLOW_COPY_AND_ASSIGN(Configuration);
+}; // class Configuration
+
+} // namespace
 
 #endif

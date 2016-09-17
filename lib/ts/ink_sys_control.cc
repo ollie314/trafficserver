@@ -21,9 +21,9 @@
   limitations under the License.
  */
 
-#include "ink_defs.h"
-#include "ink_assert.h"
-#include "ink_sys_control.h"
+#include "ts/ink_defs.h"
+#include "ts/ink_assert.h"
+#include "ts/ink_sys_control.h"
 
 rlim_t
 ink_max_out_rlimit(int which, bool max_it, bool unlim_it)
@@ -31,9 +31,9 @@ ink_max_out_rlimit(int which, bool max_it, bool unlim_it)
   struct rlimit rl;
 
 #if defined(linux)
-#  define MAGIC_CAST(x) (enum __rlimit_resource)(x)
+#define MAGIC_CAST(x) (enum __rlimit_resource)(x)
 #else
-#  define MAGIC_CAST(x) x
+#define MAGIC_CAST(x) x
 #endif
 
   if (max_it) {
@@ -71,7 +71,7 @@ ink_get_max_files()
   struct rlimit lim;
 
   // Linux-only ...
-  if ((fd = fopen("/proc/sys/fs/file-max","r"))) {
+  if ((fd = fopen("/proc/sys/fs/file-max", "r"))) {
     uint64_t fmax;
     if (fscanf(fd, "%" PRIu64 "", &fmax) == 1) {
       fclose(fd);

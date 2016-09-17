@@ -35,7 +35,7 @@
 // scheduling only occurs after they move into the data_bucket.
 //
 void
-cluster_schedule(ClusterHandler * ch, ClusterVConnection * vc, ClusterVConnState * ns)
+cluster_schedule(ClusterHandler *ch, ClusterVConnection *vc, ClusterVConnState *ns)
 {
   //
   // actually schedule into new bucket
@@ -52,7 +52,7 @@ cluster_schedule(ClusterHandler * ch, ClusterVConnection * vc, ClusterVConnState
 }
 
 void
-cluster_reschedule_offset(ClusterHandler * ch, ClusterVConnection * vc, ClusterVConnState * ns, int offset)
+cluster_reschedule_offset(ClusterHandler *ch, ClusterVConnection *vc, ClusterVConnState *ns, int offset)
 {
   if (ns == &vc->read) {
     if (vc->read.queue)
@@ -79,7 +79,7 @@ ClusterVCToken::alloc()
 #else
   ip_created = this_cluster_machine()->ip;
 #endif
-  sequence_number = ink_atomic_increment((int *) &cluster_sequence_number, 1);
+  sequence_number = ink_atomic_increment((int *)&cluster_sequence_number, 1);
 }
 
 ///////////////////////////////////////////
@@ -87,7 +87,7 @@ ClusterVCToken::alloc()
 ///////////////////////////////////////////
 
 IOBufferBlock *
-clone_IOBufferBlockList(IOBufferBlock * b, int start_off, int n, IOBufferBlock ** b_tail)
+clone_IOBufferBlockList(IOBufferBlock *b, int start_off, int n, IOBufferBlock **b_tail)
 {
   ////////////////////////////////////////////////////////////////
   // Create a clone list of IOBufferBlock(s) where the sum
@@ -96,23 +96,22 @@ clone_IOBufferBlockList(IOBufferBlock * b, int start_off, int n, IOBufferBlock *
   ////////////////////////////////////////////////////////////////
   int64_t nbytes = n;
   int64_t block_read_avail;
-  int64_t bytes_to_skip = start_off;
-  IOBufferBlock *bsrc = b;
-  IOBufferBlock *bclone = 0;
+  int64_t bytes_to_skip      = start_off;
+  IOBufferBlock *bsrc        = b;
+  IOBufferBlock *bclone      = 0;
   IOBufferBlock *bclone_head = 0;
 
   while (bsrc && nbytes) {
     // Skip zero length blocks
     if (!bsrc->read_avail()) {
-      bsrc = bsrc->next;
+      bsrc = bsrc->next.get();
       continue;
     }
 
     if (bclone_head) {
       bclone->next = bsrc->clone();
-      bclone = bclone->next;
+      bclone       = bclone->next.get();
     } else {
-
       // Skip bytes already processed
       if (bytes_to_skip) {
         bytes_to_skip -= bsrc->read_avail();
@@ -121,17 +120,17 @@ clone_IOBufferBlockList(IOBufferBlock * b, int start_off, int n, IOBufferBlock *
           // Skip bytes in current block
           bclone_head = bsrc->clone();
           bclone_head->consume(bsrc->read_avail() + bytes_to_skip);
-          bclone = bclone_head;
+          bclone        = bclone_head;
           bytes_to_skip = 0;
 
         } else {
           // Skip entire block
-          bsrc = bsrc->next;
+          bsrc = bsrc->next.get();
           continue;
         }
       } else {
         bclone_head = bsrc->clone();
-        bclone = bclone_head;
+        bclone      = bclone_head;
       }
     }
     block_read_avail = bclone->read_avail();
@@ -141,7 +140,7 @@ clone_IOBufferBlockList(IOBufferBlock * b, int start_off, int n, IOBufferBlock *
       bclone->fill(nbytes);
       nbytes = 0;
     }
-    bsrc = bsrc->next;
+    bsrc = bsrc->next.get();
   }
   ink_release_assert(!nbytes);
   *b_tail = bclone;
@@ -149,10 +148,10 @@ clone_IOBufferBlockList(IOBufferBlock * b, int start_off, int n, IOBufferBlock *
 }
 
 IOBufferBlock *
-consume_IOBufferBlockList(IOBufferBlock * b, int64_t n)
+consume_IOBufferBlockList(IOBufferBlock *b, int64_t n)
 {
   IOBufferBlock *b_remainder = 0;
-  int64_t nbytes = n;
+  int64_t nbytes             = n;
 
   while (b) {
     nbytes -= b->read_avail();
@@ -160,30 +159,32 @@ consume_IOBufferBlockList(IOBufferBlock * b, int64_t n)
       if (nbytes < 0) {
         // Consumed a partial block, clone remainder
         b_remainder = b->clone();
-        b->fill(nbytes);        // make read_avail match nbytes
-        b_remainder->consume(b->read_avail());  // clone for remaining bytes
+        b->fill(nbytes);                       // make read_avail match nbytes
+        b_remainder->consume(b->read_avail()); // clone for remaining bytes
         b_remainder->next = b->next;
-        b->next = 0;
-        nbytes = 0;
+        b->next           = 0;
+        nbytes            = 0;
 
       } else {
         // Consumed entire block
-        b_remainder = b->next;
+        b_remainder = b->next.get();
       }
       break;
 
     } else {
-      b = b->next;
+      b = b->next.get();
     }
   }
+
   ink_release_assert(nbytes == 0);
-  return b_remainder;           // return remaining blocks
+  return b_remainder; // return remaining blocks
 }
 
 int64_t
-bytes_IOBufferBlockList(IOBufferBlock * b, int64_t read_avail_bytes)
+bytes_IOBufferBlockList(IOBufferBlock *b, int64_t read_avail_bytes)
 {
-  int64_t n = 0;;
+  int64_t n = 0;
+  ;
 
   while (b) {
     if (read_avail_bytes) {
@@ -191,11 +192,11 @@ bytes_IOBufferBlockList(IOBufferBlock * b, int64_t read_avail_bytes)
     } else {
       n += b->write_avail();
     }
-    b = b->next;
+    b = b->next.get();
   }
+
   return n;
 }
-
 
 //////////////////////////////////////////////////////
 // Miscellaneous test code
@@ -205,20 +206,20 @@ bytes_IOBufferBlockList(IOBufferBlock * b, int64_t read_avail_bytes)
 // Test code which mimic the network slowdown
 //
 int
-partial_readv(int fd, IOVec * iov, int n_iov, int seq)
+partial_readv(int fd, IOVec *iov, int n_iov, int seq)
 {
   IOVec tiov[16];
-  for (int i = 0; i < n_iov; i++)
-    tiov[i] = iov[i];
-  int tn_iov = n_iov;
-  int rnd = seq;
-  int element = rand_r((unsigned int *) &rnd);
-  element = element % n_iov;
-  int byte = rand_r((unsigned int *) &rnd);
-  byte = byte % iov[element].iov_len;
-  int stop = rand_r((unsigned int *) &rnd);
-  if (!(stop % 3)) {            // 33% chance
-    tn_iov = element + 1;
+  for (int i  = 0; i < n_iov; i++)
+    tiov[i]   = iov[i];
+  int tn_iov  = n_iov;
+  int rnd     = seq;
+  int element = rand_r((unsigned int *)&rnd);
+  element     = element % n_iov;
+  int byte    = rand_r((unsigned int *)&rnd);
+  byte        = byte % iov[element].iov_len;
+  int stop    = rand_r((unsigned int *)&rnd);
+  if (!(stop % 3)) { // 33% chance
+    tn_iov                = element + 1;
     tiov[element].iov_len = byte;
     if (!byte)
       tn_iov--;
@@ -237,32 +238,32 @@ partial_readv(int fd, IOVec * iov, int n_iov, int seq)
 // Test code which mimic the network backing up (too little buffering)
 //
 int
-partial_writev(int fd, IOVec * iov, int n_iov, int seq)
+partial_writev(int fd, IOVec *iov, int n_iov, int seq)
 {
   int rnd = seq;
   int sum = 0;
-  int i = 0;
-    for (i = 0; i < n_iov; i++) {
-      int l = iov[i].iov_len;
-      int r = rand_r((unsigned int *) &rnd);
-      if ((r >> 4) & 1) {
-        l = ((unsigned int) rand_r((unsigned int *) &rnd)) % iov[i].iov_len;
-        if (!l) {
-          l = iov[i].iov_len;
-        }
-      }
-      ink_assert(l <= iov[i].iov_len);
-      fprintf(stderr, "writing %d: [%d] &%X %d of %d\n", seq, i, iov[i].iov_base, l, iov[i].iov_len);
-      int res = socketManager.write(fd, iov[i].iov_base, l);
-      if (res < 0) {
-        return res;
-      }
-      sum += res;
-      if (res != iov[i].iov_len) {
-        return sum;
+  int i   = 0;
+  for (i = 0; i < n_iov; i++) {
+    int l = iov[i].iov_len;
+    int r = rand_r((unsigned int *)&rnd);
+    if ((r >> 4) & 1) {
+      l = ((unsigned int)rand_r((unsigned int *)&rnd)) % iov[i].iov_len;
+      if (!l) {
+        l = iov[i].iov_len;
       }
     }
-    return sum;
+    ink_assert(l <= iov[i].iov_len);
+    fprintf(stderr, "writing %d: [%d] &%X %d of %d\n", seq, i, iov[i].iov_base, l, iov[i].iov_len);
+    int res = socketManager.write(fd, iov[i].iov_base, l);
+    if (res < 0) {
+      return res;
+    }
+    sum += res;
+    if (res != iov[i].iov_len) {
+      return sum;
+    }
+  }
+  return sum;
 }
 #endif // TEST_PARTIAL_WRITES
 
@@ -316,9 +317,9 @@ dump_time_buckets()
 #endif // ENABLE_TIME_TRACE
 }
 
-GlobalClusterPeriodicEvent::GlobalClusterPeriodicEvent():Continuation(new_ProxyMutex())
+GlobalClusterPeriodicEvent::GlobalClusterPeriodicEvent() : Continuation(new_ProxyMutex())
 {
-  SET_HANDLER((GClusterPEHandler) & GlobalClusterPeriodicEvent::calloutEvent);
+  SET_HANDLER((GClusterPEHandler)&GlobalClusterPeriodicEvent::calloutEvent);
 }
 
 GlobalClusterPeriodicEvent::~GlobalClusterPeriodicEvent()

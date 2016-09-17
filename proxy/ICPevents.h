@@ -27,10 +27,9 @@
 #include "I_EventSystem.h"
 
 /** Events specific to ICP. */
-typedef enum
-{
-  ICP_LOOKUP_FOUND = ICP_EVENT_EVENTS_START + 0,
-  ICP_LOOKUP_FAILED = ICP_EVENT_EVENTS_START + 1,
+typedef enum {
+  ICP_LOOKUP_FOUND     = ICP_EVENT_EVENTS_START + 0,
+  ICP_LOOKUP_FAILED    = ICP_EVENT_EVENTS_START + 1,
   ICP_RESPONSE_MESSAGE = ICP_EVENT_EVENTS_START + 2,
 
   /////////////////////////////////////////////////////

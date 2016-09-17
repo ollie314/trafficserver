@@ -21,39 +21,49 @@
   limitations under the License.
  */
 
+#include "ts/List.h"
 
-#include "List.h"
-
-class Foo { public:
+class Foo
+{
+public:
   int x;
 
-  void foo() {}
+  void
+  foo()
+  {
+  }
 
   SLINK(Foo, slink);
   LINK(Foo, dlink);
 
-  Foo(int i = 0): x(i) {}
+  Foo(int i = 0) : x(i) {}
 };
 
-int main() {
-   SList(Foo,slink) s;
-   DList(Foo,dlink) d;
-   Que(Foo,dlink) q;
-   Foo *f = new Foo;
-   f->x = 7;
-   s.push(f);
-   d.push(s.pop());
-   q.enqueue(d.pop());
-   for (int i = 0; i < 100; i++)
-     q.enqueue(new Foo(i));
-   int tot = 0;
-   for (int i = 0; i < 101; i++)
-     tot += q.dequeue()->x;
-   if (tot != 4957) {
-     printf("test_List FAILED\n");
-     exit(1);
-   } else {
-     printf("test_List PASSED\n");
-     exit(0);
-   }
+int
+main()
+{
+  SList(Foo, slink) s;
+  DList(Foo, dlink) d;
+  Que(Foo, dlink) q;
+  Foo *f = new Foo;
+  f->x   = 7;
+  s.push(f);
+  d.push(s.pop());
+  q.enqueue(d.pop());
+  for (int i = 0; i < 100; i++) {
+    q.enqueue(new Foo(i));
+  }
+  int tot = 0;
+  for (int i = 0; i < 101; i++) {
+    Foo *foo = q.dequeue();
+    tot += foo->x;
+    delete foo;
+  }
+  if (tot != 4957) {
+    printf("test_List FAILED\n");
+    exit(1);
+  } else {
+    printf("test_List PASSED\n");
+    exit(0);
+  }
 }

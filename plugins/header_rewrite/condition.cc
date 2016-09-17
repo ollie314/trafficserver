@@ -25,9 +25,8 @@
 
 #include "condition.h"
 
-
 static MatcherOps
-parse_matcher_op(std::string& arg)
+parse_matcher_op(std::string &arg)
 {
   switch (arg[0]) {
   case '=':
@@ -53,15 +52,14 @@ parse_matcher_op(std::string& arg)
   }
 }
 
-
 void
-Condition::initialize(Parser& p)
+Condition::initialize(Parser &p)
 {
   Statement::initialize(p);
 
   if (p.mod_exist("OR")) {
     if (p.mod_exist("AND")) {
-      TSError("%s: Can't have both AND and OR in mods", PLUGIN_NAME);
+      TSError("[%s] Can't have both AND and OR in mods", PLUGIN_NAME);
     } else {
       _mods = static_cast<CondModifiers>(_mods | COND_OR);
     }

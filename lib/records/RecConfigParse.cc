@@ -21,21 +21,24 @@
   limitations under the License.
  */
 
-#include "TextBuffer.h"
-#include "Tokenizer.h"
-#include "ink_defs.h"
-#include "ink_string.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_memory.h"
+
+#include "ts/TextBuffer.h"
+#include "ts/Tokenizer.h"
+#include "ts/ink_defs.h"
+#include "ts/ink_string.h"
 
 #include "P_RecFile.h"
 #include "P_RecUtils.h"
 #include "P_RecMessage.h"
 #include "P_RecCore.h"
-#include "I_Layout.h"
+#include "ts/I_Layout.h"
 
-const char     *g_rec_config_fpath = NULL;
-LLQ            *g_rec_config_contents_llq = NULL;
-InkHashTable   *g_rec_config_contents_ht = NULL;
-ink_mutex       g_rec_config_lock;
+const char *g_rec_config_fpath         = NULL;
+LLQ *g_rec_config_contents_llq         = NULL;
+InkHashTable *g_rec_config_contents_ht = NULL;
+ink_mutex g_rec_config_lock;
 
 //-------------------------------------------------------------------------
 // RecConfigFileInit
@@ -43,9 +46,9 @@ ink_mutex       g_rec_config_lock;
 void
 RecConfigFileInit(void)
 {
-    ink_mutex_init(&g_rec_config_lock, NULL);
-    g_rec_config_contents_llq = create_queue();
-    g_rec_config_contents_ht = ink_hash_table_create(InkHashTableKeyType_String);
+  ink_mutex_init(&g_rec_config_lock, NULL);
+  g_rec_config_contents_llq = create_queue();
+  g_rec_config_contents_ht  = ink_hash_table_create(InkHashTableKeyType_String);
 }
 
 //-------------------------------------------------------------------------
@@ -59,17 +62,17 @@ RecFileImport_Xmalloc(const char *file, char **file_buf, int *file_size)
   int bytes_read;
 
   if (file && file_buf && file_size) {
-    *file_buf = 0;
+    *file_buf  = 0;
     *file_size = 0;
     if ((h_file = RecFileOpenR(file)) != REC_HANDLE_INVALID) {
       *file_size = RecFileGetSize(h_file);
-      *file_buf = (char *)ats_malloc(*file_size + 1);
+      *file_buf  = (char *)ats_malloc(*file_size + 1);
       if (RecFileRead(h_file, *file_buf, *file_size, &bytes_read) != REC_ERR_FAIL && bytes_read == *file_size) {
         (*file_buf)[*file_size] = '\0';
-        err = REC_ERR_OKAY;
+        err                     = REC_ERR_OKAY;
       } else {
         ats_free(*file_buf);
-        *file_buf = 0;
+        *file_buf  = 0;
         *file_size = 0;
       }
       RecFileClose(h_file);
@@ -83,16 +86,20 @@ RecFileImport_Xmalloc(const char *file, char **file_buf, int *file_size)
 // RecConfigOverrideFromEnvironment
 //-------------------------------------------------------------------------
 const char *
-RecConfigOverrideFromEnvironment(const char * name, const char * value)
+RecConfigOverrideFromEnvironment(const char *name, const char *value)
 {
   ats_scoped_str envname(ats_strdup(name));
-  const char * envval = NULL;
+  const char *envval = NULL;
 
   // Munge foo.bar.config into FOO_BAR_CONFIG.
-  for (char * c = envname; *c != '\0'; ++c) {
+  for (char *c = envname; *c != '\0'; ++c) {
     switch (*c) {
-      case '.': *c = '_'; break;
-      default: *c = ParseRules::ink_toupper(*c); break;
+    case '.':
+      *c = '_';
+      break;
+    default:
+      *c = ParseRules::ink_toupper(*c);
+      break;
     }
   }
 
@@ -108,7 +115,7 @@ RecConfigOverrideFromEnvironment(const char * name, const char * value)
 // RecParseConfigFile
 //-------------------------------------------------------------------------
 int
-RecConfigFileParse(const char * path, RecConfigEntryCallback handler, bool inc_version)
+RecConfigFileParse(const char *path, RecConfigEntryCallback handler, bool inc_version)
 {
   char *fbuf;
   int fsize;
@@ -117,6 +124,7 @@ RecConfigFileParse(const char * path, RecConfigEntryCallback handler, bool inc_v
   int line_num;
 
   char *rec_type_str, *name_str, *data_type_str, *data_str;
+  char const *value_str;
   RecT rec_type;
   RecDataT data_type;
 
@@ -137,7 +145,7 @@ RecConfigFileParse(const char * path, RecConfigEntryCallback handler, bool inc_v
   }
   // clear our g_rec_config_contents_xxx structures
   while (!queue_is_empty(g_rec_config_contents_llq)) {
-    cfe = (RecConfigFileEntry *) dequeue(g_rec_config_contents_llq);
+    cfe = (RecConfigFileEntry *)dequeue(g_rec_config_contents_llq);
     ats_free(cfe->entry);
     ats_free(cfe);
   }
@@ -145,15 +153,16 @@ RecConfigFileParse(const char * path, RecConfigEntryCallback handler, bool inc_v
   g_rec_config_contents_ht = ink_hash_table_create(InkHashTableKeyType_String);
 
   line_tok.Initialize(fbuf, SHARE_TOKS);
-  line = line_tok.iterFirst(&line_tok_state);
+  line     = line_tok.iterFirst(&line_tok_state);
   line_num = 1;
   while (line) {
     char *lc = ats_strdup(line);
     char *lt = lc;
     char *ln;
 
-    while (isspace(*lt))
+    while (isspace(*lt)) {
       lt++;
+    }
     rec_type_str = strtok_r(lt, " \t", &ln);
 
     // check for blank lines and comments
@@ -161,7 +170,7 @@ RecConfigFileParse(const char * path, RecConfigEntryCallback handler, bool inc_v
       goto L_next_line;
     }
 
-    name_str = strtok_r(NULL, " \t", &ln);
+    name_str      = strtok_r(NULL, " \t", &ln);
     data_type_str = strtok_r(NULL, " \t", &ln);
 
     // extract the string data (a little bit tricker since it can have spaces)
@@ -172,17 +181,20 @@ RecConfigFileParse(const char * path, RecConfigEntryCallback handler, bool inc_v
       // know we didn't have a valid value.  If not, set 'data_str' to
       // the start of the token and scan until we find the end.  Once
       // the end is found, back-peddle to remove any trailing spaces.
-      while (isspace(*ln))
+      while (isspace(*ln)) {
         ln++;
+      }
       if (*ln == '\0') {
         data_str = NULL;
       } else {
         data_str = ln;
-        while (*ln != '\0')
+        while (*ln != '\0') {
           ln++;
+        }
         ln--;
-        while (isspace(*ln) && (ln > data_str))
+        while (isspace(*ln) && (ln > data_str)) {
           ln--;
+        }
         ln++;
         *ln = '\0';
       }
@@ -227,23 +239,24 @@ RecConfigFileParse(const char * path, RecConfigEntryCallback handler, bool inc_v
     }
 
     // OK, we parsed the record, send it to the handler ...
-    handler(rec_type, data_type, name_str, RecConfigOverrideFromEnvironment(name_str, data_str), inc_version);
+    value_str = RecConfigOverrideFromEnvironment(name_str, data_str);
+    handler(rec_type, data_type, name_str, value_str, value_str == data_str ? REC_SOURCE_EXPLICIT : REC_SOURCE_ENV, inc_version);
 
     // update our g_rec_config_contents_xxx
-    cfe = (RecConfigFileEntry *)ats_malloc(sizeof(RecConfigFileEntry));
+    cfe             = (RecConfigFileEntry *)ats_malloc(sizeof(RecConfigFileEntry));
     cfe->entry_type = RECE_RECORD;
-    cfe->entry = ats_strdup(name_str);
-    enqueue(g_rec_config_contents_llq, (void *) cfe);
+    cfe->entry      = ats_strdup(name_str);
+    enqueue(g_rec_config_contents_llq, (void *)cfe);
     ink_hash_table_insert(g_rec_config_contents_ht, name_str, NULL);
     goto L_done;
 
   L_next_line:
     // store this line into g_rec_config_contents_llq so that we can
     // write it out later
-    cfe = (RecConfigFileEntry *)ats_malloc(sizeof(RecConfigFileEntry));
+    cfe             = (RecConfigFileEntry *)ats_malloc(sizeof(RecConfigFileEntry));
     cfe->entry_type = RECE_COMMENT;
-    cfe->entry = ats_strdup(line);
-    enqueue(g_rec_config_contents_llq, (void *) cfe);
+    cfe->entry      = ats_strdup(line);
+    enqueue(g_rec_config_contents_llq, (void *)cfe);
 
   L_done:
     line = line_tok.iterNext(&line_tok_state);

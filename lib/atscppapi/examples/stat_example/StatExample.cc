@@ -16,7 +16,6 @@
   limitations under the License.
  */
 
-
 #include <atscppapi/GlobalPlugin.h>
 #include <atscppapi/Logger.h>
 #include <atscppapi/Stat.h>
@@ -26,32 +25,39 @@
 using namespace atscppapi;
 using std::string;
 
-namespace {
+namespace
+{
 // This is for the -T tag debugging
 // To view the debug messages ./traffic_server -T "stat_example.*"
 #define TAG "stat_example"
 
 // This will be the actual stat name
-// You can view it using traffic_line -r stat_example
+// You can view it using traffic_ctl metric get stat_example
 const string STAT_NAME = "stat_example";
 
 // This is the stat we'll be using, you can view it's value
-// using traffic_line -r stat_example
+// using traffic_ctl metric get stat_example
 Stat stat;
+
+GlobalPlugin *plugin;
 }
 
 /*
  * This is a simple plugin that will increment a counter
  * everytime a request comes in.
  */
-class GlobalHookPlugin : public GlobalPlugin {
+class GlobalHookPlugin : public GlobalPlugin
+{
 public:
-  GlobalHookPlugin() {
+  GlobalHookPlugin()
+  {
     TS_DEBUG(TAG, "Registering a global hook HOOK_READ_REQUEST_HEADERS_POST_REMAP");
     registerHook(HOOK_READ_REQUEST_HEADERS_POST_REMAP);
   }
 
-  virtual void handleReadRequestHeadersPostRemap(Transaction &transaction) {
+  virtual void
+  handleReadRequestHeadersPostRemap(Transaction &transaction)
+  {
     TS_DEBUG(TAG, "Received a request, incrementing the counter.");
     stat.increment();
     TS_DEBUG(TAG, "Stat '%s' value = %lld", STAT_NAME.c_str(), static_cast<long long>(stat.get()));
@@ -59,13 +65,15 @@ public:
   }
 };
 
-void TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED) {
+void
+TSPluginInit(int argc ATSCPPAPI_UNUSED, const char *argv[] ATSCPPAPI_UNUSED)
+{
+  RegisterGlobalPlugin("CPP_Example_Stat", "apache", "dev@trafficserver.apache.org");
   TS_DEBUG(TAG, "Loaded stat_example plugin");
 
   // Since this stat is not persistent it will be initialized to 0.
   stat.init(STAT_NAME, Stat::SYNC_COUNT, true);
   stat.set(0);
 
-  new GlobalHookPlugin();
+  plugin = new GlobalHookPlugin();
 }
-

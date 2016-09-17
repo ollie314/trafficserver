@@ -21,9 +21,12 @@
   limitations under the License.
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_Cache.h"
-#include "I_Layout.h"
+#include "ts/I_Layout.h"
+#include "ts/ink_file.h"
+#include "ts/Tokenizer.h"
+#include "ts/SimpleTokenizer.h"
 
 #if HAVE_LINUX_MAJOR_H
 #include <linux/major.h>
@@ -33,17 +36,20 @@
 // Store
 //
 
-char const Store::VOLUME_KEY[] = "volume";
+char const Store::VOLUME_KEY[]           = "volume";
 char const Store::HASH_BASE_STRING_KEY[] = "id";
 
 static span_error_t
 make_span_error(int error)
 {
   switch (error) {
-  case ENOENT: return SPAN_ERROR_NOT_FOUND;
+  case ENOENT:
+    return SPAN_ERROR_NOT_FOUND;
   case EPERM: /* fallthru */
-  case EACCES: return SPAN_ERROR_NO_ACCESS;
-  default: return SPAN_ERROR_UNKNOWN;
+  case EACCES:
+    return SPAN_ERROR_NO_ACCESS;
+  default:
+    return SPAN_ERROR_UNKNOWN;
   }
 }
 
@@ -51,31 +57,33 @@ static const char *
 span_file_typename(mode_t st_mode)
 {
   switch (st_mode & S_IFMT) {
-  case S_IFBLK: return "block device";
-  case S_IFCHR: return "character device";
-  case S_IFDIR: return "directory";
-  case S_IFREG: return "file";
-  default: return "<unsupported>";
+  case S_IFBLK:
+    return "block device";
+  case S_IFCHR:
+    return "character device";
+  case S_IFDIR:
+    return "directory";
+  case S_IFREG:
+    return "file";
+  default:
+    return "<unsupported>";
   }
 }
 
 Ptr<ProxyMutex> tmp_p;
-Store::Store():n_disks(0), disk(NULL)
-#if TS_USE_INTERIM_CACHE == 1
-              ,n_interim_disks(0), interim_disk(NULL)
-#endif
+Store::Store() : n_disks_in_config(0), n_disks(0), disk(NULL)
 {
 }
 
 void
-Store::add(Span * ds)
+Store::add(Span *ds)
 {
   extend(n_disks + 1);
   disk[n_disks - 1] = ds;
 }
 
 void
-Store::add(Store & s)
+Store::add(Store &s)
 {
   // assume on different disks
   for (unsigned i = 0; i < s.n_disks; i++) {
@@ -85,18 +93,16 @@ Store::add(Store & s)
   s.delete_all();
 }
 
-
-
 // should be changed to handle offset in more general
 // case (where this is not a free of a "just" allocated
 // store
 void
-Store::free(Store & s)
+Store::free(Store &s)
 {
   for (unsigned i = 0; i < s.n_disks; i++) {
-    for (Span * sd = s.disk[i]; sd; sd = sd->link.next) {
+    for (Span *sd = s.disk[i]; sd; sd = sd->link.next) {
       for (unsigned j = 0; j < n_disks; j++)
-        for (Span * d = disk[j]; d; d = d->link.next)
+        for (Span *d = disk[j]; d; d = d->link.next)
           if (!strcmp(sd->pathname, d->pathname)) {
             if (sd->offset < d->offset)
               d->offset = sd->offset;
@@ -112,10 +118,10 @@ Store::free(Store & s)
 void
 Store::sort()
 {
-  Span **vec = (Span **) alloca(sizeof(Span *) * n_disks);
+  Span **vec = (Span **)alloca(sizeof(Span *) * n_disks);
   memset(vec, 0, sizeof(Span *) * n_disks);
   for (unsigned i = 0; i < n_disks; i++) {
-    vec[i] = disk[i];
+    vec[i]  = disk[i];
     disk[i] = NULL;
   }
 
@@ -123,12 +129,12 @@ Store::sort()
 
   unsigned n = 0;
   for (unsigned i = 0; i < n_disks; i++) {
-    for (Span * sd = vec[i]; sd; sd = vec[i]) {
+    for (Span *sd = vec[i]; sd; sd = vec[i]) {
       vec[i] = vec[i]->link.next;
       for (unsigned d = 0; d < n; d++) {
         if (sd->disk_id == disk[d]->disk_id) {
           sd->link.next = disk[d];
-          disk[d] = sd;
+          disk[d]       = sd;
           goto Ldone;
         }
       }
@@ -142,32 +148,31 @@ Store::sort()
 
   for (unsigned i = 0; i < n_disks; i++) {
   Lagain:
-    Span * prev = 0;
-    for (Span * sd = disk[i]; sd;) {
+    Span *prev = 0;
+    for (Span *sd = disk[i]; sd;) {
       Span *next = sd->link.next;
       if (next &&
-          ((strcmp(sd->pathname, next->pathname) < 0) ||
-           (!strcmp(sd->pathname, next->pathname) && sd->offset > next->offset))) {
+          ((strcmp(sd->pathname, next->pathname) < 0) || (!strcmp(sd->pathname, next->pathname) && sd->offset > next->offset))) {
         if (!prev) {
-          disk[i] = next;
-          sd->link.next = next->link.next;
+          disk[i]         = next;
+          sd->link.next   = next->link.next;
           next->link.next = sd;
         } else {
           prev->link.next = next;
-          sd->link.next = next->link.next;
+          sd->link.next   = next->link.next;
           next->link.next = sd;
         }
         goto Lagain;
       }
       prev = sd;
-      sd = next;
+      sd   = next;
     }
   }
 
   // merge adjacent spans
 
   for (unsigned i = 0; i < n_disks; i++) {
-    for (Span * sd = disk[i]; sd;) {
+    for (Span *sd = disk[i]; sd;) {
       Span *next = sd->link.next;
       if (next && !strcmp(sd->pathname, next->pathname)) {
         if (!sd->file_pathname) {
@@ -211,7 +216,7 @@ Span::errorstr(span_error_t serr)
 }
 
 int
-Span::path(char *filename, int64_t * aoffset, char *buf, int buflen)
+Span::path(char *filename, int64_t *aoffset, char *buf, int buflen)
 {
   ink_assert(!aoffset);
   Span *ds = this;
@@ -228,7 +233,7 @@ Span::path(char *filename, int64_t * aoffset, char *buf, int buflen)
 }
 
 void
-Span::hash_base_string_set(char const* s)
+Span::hash_base_string_set(char const *s)
 {
   hash_base_string = s ? ats_strdup(s) : NULL;
 }
@@ -263,9 +268,9 @@ Span::~Span()
 }
 
 static int
-get_int64(int fd, int64_t & data)
+get_int64(int fd, int64_t &data)
 {
-  char buf[PATH_NAME_MAX + 1];
+  char buf[PATH_NAME_MAX];
   if (ink_file_fd_readline(fd, PATH_NAME_MAX, buf) <= 0)
     return (-1);
   // the above line will guarantee buf to be no longer than PATH_NAME_MAX
@@ -284,13 +289,13 @@ Store::remove(char *n)
 Lagain:
   for (unsigned i = 0; i < n_disks; i++) {
     Span *p = NULL;
-    for (Span * sd = disk[i]; sd; sd = sd->link.next) {
+    for (Span *sd = disk[i]; sd; sd = sd->link.next) {
       if (!strcmp(n, sd->pathname)) {
         found = true;
         if (p)
           p->link.next = sd->link.next;
         else
-          disk[i] = sd->link.next;
+          disk[i]     = sd->link.next;
         sd->link.next = NULL;
         delete sd;
         goto Lagain;
@@ -304,9 +309,9 @@ Lagain:
 const char *
 Store::read_config()
 {
-  int n_dsstore = 0;
-  int ln = 0;
-  int i = 0;
+  int n_dsstore   = 0;
+  int ln          = 0;
+  int i           = 0;
   const char *err = NULL;
   Span *sd = NULL, *cur = NULL;
   Span *ns;
@@ -325,15 +330,16 @@ Store::read_config()
   char line[1024];
   int len;
   while ((len = ink_file_fd_readline(fd, sizeof(line), line)) > 0) {
-    char const* path;
-    char const* seed = 0;
+    char const *path;
+    char const *seed = 0;
     // update lines
 
     ++ln;
 
     // Because the SimpleTokenizer is a bit too simple, we have to normalize whitespace.
-    for ( char *spot = line, *limit = line+len ; spot < limit ; ++spot )
-      if (ParseRules::is_space(*spot)) *spot = ' '; // force whitespace to literal space.
+    for (char *spot = line, *limit = line + len; spot < limit; ++spot)
+      if (ParseRules::is_space(*spot))
+        *spot = ' '; // force whitespace to literal space.
 
     SimpleTokenizer tokens(line, ' ', SimpleTokenizer::OVERWRITE_INPUT_STRING);
 
@@ -344,24 +350,27 @@ Store::read_config()
 
     // parse
     Debug("cache_init", "Store::read_config: \"%s\"", path);
+    ++n_disks_in_config;
 
-    int64_t size = -1;
+    int64_t size   = -1;
     int volume_num = -1;
-    char const* e;
+    char const *e;
     while (0 != (e = tokens.getNext())) {
       if (ParseRules::is_digit(*e)) {
         if ((size = ink_atoi64(e)) <= 0) {
           err = "error parsing size";
           goto Lfail;
         }
-      } else if (0 == strncasecmp(HASH_BASE_STRING_KEY, e, sizeof(HASH_BASE_STRING_KEY)-1)) {
+      } else if (0 == strncasecmp(HASH_BASE_STRING_KEY, e, sizeof(HASH_BASE_STRING_KEY) - 1)) {
         e += sizeof(HASH_BASE_STRING_KEY) - 1;
-        if ('=' == *e) ++e;
+        if ('=' == *e)
+          ++e;
         if (*e && !ParseRules::is_space(*e))
           seed = e;
-      } else if (0 == strncasecmp(VOLUME_KEY, e, sizeof(VOLUME_KEY)-1)) {
+      } else if (0 == strncasecmp(VOLUME_KEY, e, sizeof(VOLUME_KEY) - 1)) {
         e += sizeof(VOLUME_KEY) - 1;
-        if ('=' == *e) ++e;
+        if ('=' == *e)
+          ++e;
         if (!*e || !ParseRules::is_digit(*e) || 0 >= (volume_num = ink_atoi(e))) {
           err = "error parsing volume number";
           goto Lfail;
@@ -370,9 +379,10 @@ Store::read_config()
     }
 
     char *pp = Layout::get()->relative(path);
+
     ns = new Span;
-    Debug("cache_init", "Store::read_config - ns = new Span; ns->init(\"%s\",%" PRId64 "), forced volume=%d%s%s",
-          pp, size, volume_num, seed ? " id=" : "", seed ? seed : "");
+    Debug("cache_init", "Store::read_config - ns = new Span; ns->init(\"%s\",%" PRId64 "), forced volume=%d%s%s", pp, size,
+          volume_num, seed ? " id=" : "", seed ? seed : "");
     if ((err = ns->init(pp, size))) {
       RecSignalWarning(REC_SIGNAL_SYSTEM_ERROR, "could not initialize storage \"%s\" [%s]", pp, err);
       Debug("cache_init", "Store::read_config - could not initialize storage \"%s\" [%s]", pp, err);
@@ -384,13 +394,15 @@ Store::read_config()
     n_dsstore++;
 
     // Set side values if present.
-    if (seed) ns->hash_base_string_set(seed);
-    if (volume_num > 0) ns->volume_number_set(volume_num);
+    if (seed)
+      ns->hash_base_string_set(seed);
+    if (volume_num > 0)
+      ns->volume_number_set(volume_num);
 
     // new Span
     {
       Span *prev = cur;
-      cur = ns;
+      cur        = ns;
       if (!sd)
         sd = cur;
       else
@@ -402,10 +414,10 @@ Store::read_config()
   extend(n_dsstore);
   cur = sd;
   while (cur) {
-    Span* next = cur->link.next;
+    Span *next     = cur->link.next;
     cur->link.next = NULL;
-    disk[i++] = cur;
-    cur = next;
+    disk[i++]      = cur;
+    cur            = next;
   }
   sd = 0; // these are all used.
   sort();
@@ -419,57 +431,13 @@ Lfail:
   return err;
 }
 
-#if TS_USE_INTERIM_CACHE == 1
-const char *
-Store::read_interim_config() {
-  char p[PATH_NAME_MAX + 1];
-  Span *sd = NULL;
-  Span *ns;
-  int interim_store = 0;
-  REC_ReadConfigString(p, "proxy.config.cache.interim.storage", PATH_NAME_MAX);
-
-  char *n = p;
-  int sz = strlen(p);
-
-  const char *err = NULL;
-  for (int len = 0; n < p + sz; n += len + 1) {
-    char *e = strpbrk(n, " \t\n");
-    len = e ? e - n : strlen(n);
-    n[len] = '\0';
-    ns = new Span;
-    if ((err = ns->init(n, -1))) {
-      RecSignalWarning(REC_SIGNAL_SYSTEM_ERROR, "could not initialize storage \"%s\" [%s]", n, err);
-      Debug("cache_init", "Store::read_interim_config - could not initialize storage \"%s\" [%s]", n, err);
-      delete ns;
-      continue;
-    }
-    ns->link.next = sd;
-    sd = ns;
-    interim_store++;
-  }
-
-  n_interim_disks = interim_store;
-  interim_disk = (Span **) ats_malloc(interim_store * sizeof(Span *));
-  {
-    int i = 0;
-    while (sd) {
-      ns = sd;
-      sd = sd->link.next;
-      ns->link.next = NULL;
-      interim_disk[i++] = ns;
-    }
-  }
-  return NULL;
-}
-#endif
-
 int
 Store::write_config_data(int fd) const
 {
   for (unsigned i = 0; i < n_disks; i++)
-    for (Span * sd = disk[i]; sd; sd = sd->link.next) {
+    for (Span *sd = disk[i]; sd; sd = sd->link.next) {
       char buf[PATH_NAME_MAX + 64];
-      snprintf(buf, sizeof(buf), "%s %" PRId64 "\n", sd->pathname.get(), (int64_t) sd->blocks * (int64_t) STORE_BLOCK_SIZE);
+      snprintf(buf, sizeof(buf), "%s %" PRId64 "\n", sd->pathname.get(), (int64_t)sd->blocks * (int64_t)STORE_BLOCK_SIZE);
       if (ink_file_fd_writestring(fd, buf) == -1)
         return (-1);
     }
@@ -477,11 +445,11 @@ Store::write_config_data(int fd) const
 }
 
 const char *
-Span::init(const char * path, int64_t size)
+Span::init(const char *path, int64_t size)
 {
-  struct stat     sbuf;
-  struct statvfs  vbuf;
-  span_error_t    serr;
+  struct stat sbuf;
+  struct statvfs vbuf;
+  span_error_t serr;
   ink_device_geometry geometry;
 
   ats_scoped_fd fd(socketManager.open(path, O_RDONLY));
@@ -542,12 +510,12 @@ Span::init(const char * path, int64_t size)
       goto fail;
     }
 
-    this->disk_id[0] = 0;
-    this->disk_id[1] = sbuf.st_rdev;
-    this->file_pathname = true;
+    this->disk_id[0]     = 0;
+    this->disk_id[1]     = sbuf.st_rdev;
+    this->file_pathname  = true;
     this->hw_sector_size = geometry.blocksz;
-    this->alignment = geometry.alignsz;
-    this->blocks = geometry.totalsz / STORE_BLOCK_SIZE;
+    this->alignment      = geometry.alignsz;
+    this->blocks         = geometry.totalsz / STORE_BLOCK_SIZE;
 
     break;
 
@@ -561,11 +529,11 @@ Span::init(const char * path, int64_t size)
     // it the right size based on the "file_pathname" flag. That's something that we should clean up in the future.
     this->file_pathname = false;
 
-    this->disk_id[0] = sbuf.st_dev;
-    this->disk_id[1] = sbuf.st_ino;
+    this->disk_id[0]     = sbuf.st_dev;
+    this->disk_id[1]     = sbuf.st_ino;
     this->hw_sector_size = vbuf.f_bsize;
-    this->alignment = 0;
-    this->blocks = size / STORE_BLOCK_SIZE;
+    this->alignment      = 0;
+    this->blocks         = size / STORE_BLOCK_SIZE;
     break;
 
   case S_IFREG:
@@ -577,12 +545,12 @@ Span::init(const char * path, int64_t size)
       }
     }
 
-    this->disk_id[0] = sbuf.st_dev;
-    this->disk_id[1] = sbuf.st_ino;
-    this->file_pathname = true;
+    this->disk_id[0]     = sbuf.st_dev;
+    this->disk_id[1]     = sbuf.st_ino;
+    this->file_pathname  = true;
     this->hw_sector_size = vbuf.f_bsize;
-    this->alignment = 0;
-    this->blocks = sbuf.st_size / STORE_BLOCK_SIZE;
+    this->alignment      = 0;
+    this->blocks         = sbuf.st_size / STORE_BLOCK_SIZE;
 
     break;
 
@@ -596,7 +564,7 @@ Span::init(const char * path, int64_t size)
     int64_t newsz = MIN(size, this->size());
 
     Note("cache %s '%s' is %" PRId64 " bytes, but the configured size is %" PRId64 " bytes, using the minimum",
-      span_file_typename(sbuf.st_mode), path, this->size(), size);
+         span_file_typename(sbuf.st_mode), path, this->size(), size);
 
     this->blocks = newsz / STORE_BLOCK_SIZE;
   }
@@ -607,14 +575,13 @@ Span::init(const char * path, int64_t size)
 
   Debug("cache_init", "initialized span '%s'", this->pathname.get());
   Debug("cache_init", "hw_sector_size=%d, size=%" PRId64 ", blocks=%" PRId64 ", disk_id=%" PRId64 "/%" PRId64 ", file_pathname=%d",
-    this->hw_sector_size, this->size(), this->blocks, this->disk_id[0], this->disk_id[1], this->file_pathname);
+        this->hw_sector_size, this->size(), this->blocks, this->disk_id[0], this->disk_id[1], this->file_pathname);
 
   return NULL;
 
 fail:
   return Span::errorstr(serr);
 }
-
 
 void
 Store::normalize()
@@ -628,20 +595,20 @@ Store::normalize()
 }
 
 static unsigned int
-try_alloc(Store & target, Span * source, unsigned int start_blocks, bool one_only = false)
+try_alloc(Store &target, Span *source, unsigned int start_blocks, bool one_only = false)
 {
   unsigned int blocks = start_blocks;
-  Span *ds = NULL;
+  Span *ds            = NULL;
   while (source && blocks) {
     if (source->blocks) {
-      unsigned int a;           // allocated
+      unsigned int a; // allocated
       if (blocks > source->blocks)
         a = source->blocks;
       else
-        a = blocks;
+        a     = blocks;
       Span *d = new Span(*source);
 
-      d->blocks = a;
+      d->blocks    = a;
       d->link.next = ds;
 
       if (d->file_pathname)
@@ -660,7 +627,7 @@ try_alloc(Store & target, Span * source, unsigned int start_blocks, bool one_onl
 }
 
 void
-Store::spread_alloc(Store & s, unsigned int blocks, bool mmapable)
+Store::spread_alloc(Store &s, unsigned int blocks, bool mmapable)
 {
   //
   // Count the eligable disks..
@@ -695,13 +662,13 @@ Store::spread_alloc(Store & s, unsigned int blocks, bool mmapable)
 }
 
 void
-Store::try_realloc(Store & s, Store & diff)
+Store::try_realloc(Store &s, Store &diff)
 {
   for (unsigned i = 0; i < s.n_disks; i++) {
     Span *prev = 0;
-    for (Span * sd = s.disk[i]; sd;) {
+    for (Span *sd = s.disk[i]; sd;) {
       for (unsigned j = 0; j < n_disks; j++)
-        for (Span * d = disk[j]; d; d = d->link.next)
+        for (Span *d = disk[j]; d; d = d->link.next)
           if (!strcmp(sd->pathname, d->pathname)) {
             if (sd->offset >= d->offset && (sd->end() <= d->end())) {
               if (!sd->file_pathname || (sd->end() == d->end())) {
@@ -714,7 +681,7 @@ Store::try_realloc(Store & s, Store & diff)
               } else {
                 Span *x = new Span(*d);
                 // d will be the first vol
-                d->blocks = sd->offset - d->offset;
+                d->blocks    = sd->offset - d->offset;
                 d->link.next = x;
                 // x will be the last vol
                 x->offset = sd->offset + sd->blocks;
@@ -730,13 +697,13 @@ Store::try_realloc(Store & s, Store & diff)
           prev->link.next = sd->link.next;
         diff.extend(i + 1);
         sd->link.next = diff.disk[i];
-        diff.disk[i] = sd;
-        sd = prev ? prev->link.next : s.disk[i];
+        diff.disk[i]  = sd;
+        sd            = prev ? prev->link.next : s.disk[i];
         continue;
       }
     Lfound:;
       prev = sd;
-      sd = sd->link.next;
+      sd   = sd->link.next;
     }
   }
   normalize();
@@ -748,7 +715,7 @@ Store::try_realloc(Store & s, Store & diff)
 // Stupid grab first availabled space allocator
 //
 void
-Store::alloc(Store & s, unsigned int blocks, bool one_only, bool mmapable)
+Store::alloc(Store &s, unsigned int blocks, bool one_only, bool mmapable)
 {
   unsigned int oblocks = blocks;
   for (unsigned i = 0; blocks && i < n_disks; i++) {
@@ -782,7 +749,7 @@ Span::write(int fd) const
   if (ink_file_fd_writestring(fd, buf) == -1)
     return (-1);
 
-  snprintf(buf, sizeof(buf), "%d\n", (int) is_mmapable());
+  snprintf(buf, sizeof(buf), "%d\n", (int)is_mmapable());
   if (ink_file_fd_writestring(fd, buf) == -1)
     return (-1);
 
@@ -804,7 +771,7 @@ Store::write(int fd, const char *name) const
     return (-1);
 
   for (unsigned i = 0; i < n_disks; i++) {
-    int n = 0;
+    int n    = 0;
     Span *sd = NULL;
     for (sd = disk[i]; sd; sd = sd->link.next) {
       n++;
@@ -825,7 +792,7 @@ Store::write(int fd, const char *name) const
 int
 Span::read(int fd)
 {
-  char buf[PATH_NAME_MAX + 1], p[PATH_NAME_MAX + 1];
+  char buf[PATH_NAME_MAX], p[PATH_NAME_MAX];
 
   if (ink_file_fd_readline(fd, PATH_NAME_MAX, buf) <= 0)
     return (-1);
@@ -871,8 +838,8 @@ int
 Store::read(int fd, char *aname)
 {
   char *name = aname;
-  char tname[PATH_NAME_MAX + 1];
-  char buf[PATH_NAME_MAX + 1];
+  char tname[PATH_NAME_MAX];
+  char buf[PATH_NAME_MAX];
   if (!aname)
     name = tname;
 
@@ -910,7 +877,7 @@ Store::read(int fd, char *aname)
     Span *sd = NULL;
     while (n--) {
       Span *last = sd;
-      sd = new Span;
+      sd         = new Span;
 
       if (!last)
         disk[i] = sd;
@@ -939,10 +906,10 @@ Span::dup()
 }
 
 void
-Store::dup(Store & s)
+Store::dup(Store &s)
 {
   s.n_disks = n_disks;
-  s.disk = (Span **)ats_malloc(sizeof(Span *) * n_disks);
+  s.disk    = (Span **)ats_malloc(sizeof(Span *) * n_disks);
   for (unsigned i = 0; i < n_disks; i++) {
     s.disk[i] = disk[i]->dup();
   }
@@ -956,14 +923,14 @@ Store::clear(char *filename, bool clear_dirs)
   for (unsigned i = 0; i < n_disks; i++) {
     Span *ds = disk[i];
     for (unsigned j = 0; j < disk[i]->paths(); j++) {
-      char path[PATH_NAME_MAX + 1];
+      char path[PATH_NAME_MAX];
       Span *d = ds->nth(j);
       if (!clear_dirs && !d->file_pathname)
         continue;
       int r = d->path(filename, NULL, path, PATH_NAME_MAX);
       if (r < 0)
         return -1;
-      int fd =::open(path, O_RDWR | O_CREAT, 0644);
+      int fd = ::open(path, O_RDWR | O_CREAT, 0644);
       if (fd < 0)
         return -1;
       for (int b = 0; d->blocks; b++)

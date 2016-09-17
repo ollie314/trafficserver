@@ -31,7 +31,8 @@
 #ifndef _Proxy_Config_h
 #define _Proxy_Config_h
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_memory.h"
 #include "ProcessManager.h"
 #include "I_EventSystem.h"
 
@@ -43,16 +44,23 @@ void *config_float_cb(void *data, void *value);
 void *config_string511_cb(void *data, void *value);
 void *config_string_alloc_cb(void *data, void *value);
 
+// Configuration file flags shared by proxy configuration and mgmt.
+#define CONFIG_FLAG_NONE 0u
+#define CONFIG_FLAG_UNVERSIONED 1u // Don't version this config file
+
 //
 // Macros that spin waiting for the data to be bound
 //
-#define SignalManager(_n,_d) pmgmt->signalManager(_n,(char*)_d)
-#define SignalWarning(_n,_s) { Warning("%s", _s); SignalManager(_n,_s); }
+#define SignalManager(_n, _d) pmgmt->signalManager(_n, (char *)_d)
+#define SignalWarning(_n, _s) \
+  {                           \
+    Warning("%s", _s);        \
+    SignalManager(_n, _s);    \
+  }
 
-#define RegisterMgmtCallback(_signal,_fn,_data) \
-pmgmt->registerMgmtCallback(_signal,_fn,_data)
+#define RegisterMgmtCallback(_signal, _fn, _data) pmgmt->registerMgmtCallback(_signal, _fn, _data)
 
-#define MAX_CONFIGS  100
+#define MAX_CONFIGS 100
 
 typedef RefCountObj ConfigInfo;
 
@@ -67,22 +75,19 @@ public:
     CONFIG_PROCESSOR_RELEASE_SECS = 60
   };
 
-  template <typename ClassType, typename ConfigType>
-  struct scoped_config {
+  template <typename ClassType, typename ConfigType> struct scoped_config {
     scoped_config() : ptr(ClassType::acquire()) {}
     ~scoped_config() { ClassType::release(ptr); }
-
     operator bool() const { return ptr != 0; }
-    operator const ConfigType * () const { return ptr; }
-    const ConfigType * operator->() const { return ptr; }
-
+    operator const ConfigType *() const { return ptr; }
+    const ConfigType *operator->() const { return ptr; }
   private:
-    ConfigType * ptr;
+    ConfigType *ptr;
   };
 
-  unsigned int set(unsigned int id, ConfigInfo * info, unsigned timeout_secs = CONFIG_PROCESSOR_RELEASE_SECS);
+  unsigned int set(unsigned int id, ConfigInfo *info, unsigned timeout_secs = CONFIG_PROCESSOR_RELEASE_SECS);
   ConfigInfo *get(unsigned int id);
-  void release(unsigned int id, ConfigInfo * data);
+  void release(unsigned int id, ConfigInfo *data);
 
 public:
   ConfigInfo *infos[MAX_CONFIGS];
@@ -90,46 +95,40 @@ public:
 };
 
 // A Continuation wrapper that calls the static reconfigure() method of the given class.
-template <typename UpdateClass>
-struct ConfigUpdateContinuation : public Continuation
-{
-
-  int update(int /* etype */, void * /* data */) {
+template <typename UpdateClass> struct ConfigUpdateContinuation : public Continuation {
+  int
+  update(int /* etype */, void * /* data */)
+  {
     UpdateClass::reconfigure();
     delete this;
     return EVENT_DONE;
   }
 
-  ConfigUpdateContinuation(ProxyMutex * m) : Continuation(m) {
-    SET_HANDLER(&ConfigUpdateContinuation::update);
-  }
-
+  ConfigUpdateContinuation(Ptr<ProxyMutex> &m) : Continuation(m.get()) { SET_HANDLER(&ConfigUpdateContinuation::update); }
 };
 
-template <typename UpdateClass> int
-ConfigScheduleUpdate(ProxyMutex * mutex) {
+template <typename UpdateClass>
+int
+ConfigScheduleUpdate(Ptr<ProxyMutex> &mutex)
+{
   eventProcessor.schedule_imm(new ConfigUpdateContinuation<UpdateClass>(mutex), ET_CALL);
   return 0;
 }
 
-template <typename UpdateClass>
-struct ConfigUpdateHandler
-{
-  ConfigUpdateHandler() : mutex(new_ProxyMutex()) {
-  }
-
-  ~ConfigUpdateHandler() {
-    mutex->free();
-  }
-
-  int attach(const char * name) {
+template <typename UpdateClass> struct ConfigUpdateHandler {
+  ConfigUpdateHandler() : mutex(new_ProxyMutex()) {}
+  ~ConfigUpdateHandler() { mutex->free(); }
+  int
+  attach(const char *name)
+  {
     return REC_RegisterConfigUpdateFunc(name, ConfigUpdateHandler::update, this);
   }
 
 private:
-  static int update(const char * name, RecDataT /* data_type ATS_UNUSED */, RecData /* data ATS_UNUSED */,
-                    void * cookie) {
-    ConfigUpdateHandler * self = static_cast<ConfigUpdateHandler *>(cookie);
+  static int
+  update(const char *name, RecDataT /* data_type ATS_UNUSED */, RecData /* data ATS_UNUSED */, void *cookie)
+  {
+    ConfigUpdateHandler *self = static_cast<ConfigUpdateHandler *>(cookie);
 
     Debug("config", "%s(%s)", __PRETTY_FUNCTION__, name);
     return ConfigScheduleUpdate<UpdateClass>(self->mutex);

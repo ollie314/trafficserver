@@ -21,34 +21,32 @@
   limitations under the License.
  */
 
-#include "ink_config.h"
+#include "ts/ink_config.h"
 #include "RecordsConfig.h"
-#include "ParseRules.h"
+#include "ts/ParseRules.h"
 
 //-------------------------------------------------------------------------
 // RecordsConfigOverrideFromEnvironment
 //-------------------------------------------------------------------------
 
 static void
-override_record(const RecordElement * record, void *)
+override_record(const RecordElement *record, void *)
 {
   if (REC_TYPE_IS_CONFIG(record->type)) {
-    const char * value;
+    const char *value;
     RecData data = {0};
 
     if ((value = RecConfigOverrideFromEnvironment(record->name, NULL))) {
-
       if (RecDataSetFromString(record->value_type, &data, value)) {
         // WARNING: If we are not the record owner, RecSetRecord() doesn't set our copy
         // of the record. It sends a set message to the local manager. This can cause
         // "interesting" results if you are trying to override configuration values
         // early in startup (before we have synced with the local manager).
-        RecSetRecord(record->type, record->name, record->value_type, &data, NULL, false);
-        RecDataClear(record->value_type, &data);
+        RecSetRecord(record->type, record->name, record->value_type, &data, NULL, REC_SOURCE_ENV, false);
+        RecDataZero(record->value_type, &data);
       }
     }
   }
-
 }
 
 // We process environment variable overrides when we parse the records.config configuration file, but the
@@ -65,10 +63,10 @@ RecordsConfigOverrideFromEnvironment()
 //-------------------------------------------------------------------------
 
 static void
-initialize_record(const RecordElement * record, void *)
+initialize_record(const RecordElement *record, void *)
 {
-  RecInt tempInt = 0;
-  RecFloat tempFloat = 0.0;
+  RecInt tempInt         = 0;
+  RecFloat tempFloat     = 0.0;
   RecCounter tempCounter = 0;
 
   RecUpdateT update;
@@ -77,52 +75,58 @@ initialize_record(const RecordElement * record, void *)
   RecT type;
 
   // Less typing ...
-  type = record->type;
+  type   = record->type;
   update = record->update;
-  check = record->check;
+  check  = record->check;
   access = record->access;
 
   if (REC_TYPE_IS_CONFIG(type)) {
-    const char * value = RecConfigOverrideFromEnvironment(record->name, record->value);
-    RecData data = {0};
+    const char *value = RecConfigOverrideFromEnvironment(record->name, record->value);
+    RecData data      = {0};
+    RecSourceT source = value == record->value ? REC_SOURCE_DEFAULT : REC_SOURCE_ENV;
+
+    // If you specify a consistency check, you have to specify a regex expression. We abort here
+    // so that this breaks QA completely.
+    if (record->check != RECC_NULL && record->regex == NULL) {
+      ink_fatal("%s has a consistency check but no regular expression", record->name);
+    }
 
     RecDataSetFromString(record->value_type, &data, value);
 
     switch (record->value_type) {
     case RECD_INT:
-      RecRegisterConfigInt(type, record->name, data.rec_int, update, check, record->regex, access);
+      RecRegisterConfigInt(type, record->name, data.rec_int, update, check, record->regex, source, access);
       break;
 
     case RECD_FLOAT:
-      RecRegisterConfigFloat(type, record->name, data.rec_float, update, check, record->regex, access);
+      RecRegisterConfigFloat(type, record->name, data.rec_float, update, check, record->regex, source, access);
       break;
 
     case RECD_STRING:
-      RecRegisterConfigString(type, record->name, data.rec_string, update, check, record->regex, access);
+      RecRegisterConfigString(type, record->name, data.rec_string, update, check, record->regex, source, access);
       break;
 
     case RECD_COUNTER:
-      RecRegisterConfigCounter(type, record->name, data.rec_counter, update, check, record->regex, access);
+      RecRegisterConfigCounter(type, record->name, data.rec_counter, update, check, record->regex, source, access);
       break;
 
     default:
       ink_assert(true);
       break;
-    }                         // switch
+    } // switch
 
-    RecDataClear(record->value_type, &data);
+    RecDataZero(record->value_type, &data);
   } else { // Everything else, except PROCESS, are stats. TODO: Should modularize this too like PROCESS was done.
     ink_assert(REC_TYPE_IS_STAT(type));
 
     switch (record->value_type) {
-
     case RECD_INT:
-      tempInt = (RecInt) ink_atoi64(record->value);
+      tempInt = (RecInt)ink_atoi64(record->value);
       RecRegisterStatInt(type, record->name, tempInt, RECP_NON_PERSISTENT);
       break;
 
     case RECD_FLOAT:
-      tempFloat = (RecFloat) atof(record->value);
+      tempFloat = (RecFloat)atof(record->value);
       RecRegisterStatFloat(type, record->name, tempFloat, RECP_NON_PERSISTENT);
       break;
 
@@ -131,16 +135,15 @@ initialize_record(const RecordElement * record, void *)
       break;
 
     case RECD_COUNTER:
-      tempCounter = (RecCounter) ink_atoi64(record->value);
+      tempCounter = (RecCounter)ink_atoi64(record->value);
       RecRegisterStatCounter(type, record->name, tempCounter, RECP_NON_PERSISTENT);
       break;
 
     default:
       ink_assert(true);
       break;
-    }                         // switch
+    } // switch
   }
-
 }
 
 void
@@ -152,8 +155,8 @@ LibRecordsConfigInit()
 void
 test_librecords()
 {
-  RecRegisterStatInt(RECT_PROCESS, "proxy.process.librecords.testing.int", (RecInt) 100, RECP_NON_PERSISTENT);
-  RecRegisterStatFloat(RECT_NODE, "proxy.node.librecords.testing.float", (RecFloat) 100.1, RECP_NON_PERSISTENT);
+  RecRegisterStatInt(RECT_PROCESS, "proxy.process.librecords.testing.int", (RecInt)100, RECP_NON_PERSISTENT);
+  RecRegisterStatFloat(RECT_NODE, "proxy.node.librecords.testing.float", (RecFloat)100.1, RECP_NON_PERSISTENT);
   RecRegisterStatString(RECT_CLUSTER, "proxy.cluster.librecords.testing.string", (RecString) "Hello World\n", RECP_NON_PERSISTENT);
-  RecRegisterStatCounter(RECT_LOCAL, "proxy.local.librecords.testing.counter", (RecCounter) 99, RECP_NON_PERSISTENT);
+  RecRegisterStatCounter(RECT_LOCAL, "proxy.local.librecords.testing.counter", (RecCounter)99, RECP_NON_PERSISTENT);
 }

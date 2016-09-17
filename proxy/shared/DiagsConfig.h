@@ -23,27 +23,25 @@
 
 #ifndef __DIAGSCONFIG_H__
 #define __DIAGSCONFIG_H__
-#include "Diags.h"
+#include "ts/Diags.h"
+#include "ts/BaseLogFile.h"
 
-struct DiagsConfig
-{
-
+struct DiagsConfig {
   void reconfigure_diags();
   void config_diags_norecords();
-  void parse_output_string(char *s, DiagsModeOutput * o);
+  void parse_output_string(char *s, DiagsModeOutput *o);
   void RegisterDiagConfig();
   void register_diags_callbacks();
 
-  DiagsConfig(const char * filename, const char * tags, const char * actions, bool use_records = true);
-   ~DiagsConfig();
+  DiagsConfig(const char *filename, const char *tags, const char *actions, bool use_records = true);
+  ~DiagsConfig();
 
 private:
   bool callbacks_established;
-  FILE *diags_log_fp;
+  BaseLogFile *diags_log;
 
 public:
   Diags *diags;
 };
-
 
 #endif

@@ -21,7 +21,8 @@
   limitations under the License.
  */
 
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/ink_string.h"
 #include "P_RecFile.h"
 #include "P_RecDefs.h"
 #include "P_RecUtils.h"
@@ -34,7 +35,7 @@ RecHandle
 RecFileOpenR(const char *file)
 {
   RecHandle h_file;
-  return ((h_file =::open(file, O_RDONLY)) < 0) ? REC_HANDLE_INVALID : h_file;
+  return ((h_file = ::open(file, O_RDONLY)) < 0) ? REC_HANDLE_INVALID : h_file;
 }
 
 //-------------------------------------------------------------------------
@@ -46,10 +47,10 @@ RecFileOpenW(const char *file)
 {
   RecHandle h_file;
 
-  if ((h_file =::open(file, O_WRONLY | O_TRUNC | O_CREAT, 0600)) < 0) {
+  if ((h_file = ::open(file, O_WRONLY | O_TRUNC | O_CREAT, 0600)) < 0) {
     return REC_HANDLE_INVALID;
   }
-  fcntl(h_file, F_SETFD, 1);
+  fcntl(h_file, F_SETFD, FD_CLOEXEC);
   return h_file;
 }
 
@@ -57,7 +58,8 @@ RecFileOpenW(const char *file)
 // RecFileSync
 //-------------------------------------------------------------------------
 
-int RecFileSync(RecHandle h_file)
+int
+RecFileSync(RecHandle h_file)
 {
   return (fsync(h_file) == 0) ? REC_ERR_OKAY : REC_ERR_FAIL;
 }
@@ -79,7 +81,7 @@ RecFileClose(RecHandle h_file)
 int
 RecFileRead(RecHandle h_file, char *buf, int size, int *bytes_read)
 {
-  if ((*bytes_read =::read(h_file, buf, size)) <= 0) {
+  if ((*bytes_read = ::read(h_file, buf, size)) <= 0) {
     *bytes_read = 0;
     return REC_ERR_FAIL;
   }
@@ -93,7 +95,7 @@ RecFileRead(RecHandle h_file, char *buf, int size, int *bytes_read)
 int
 RecFileWrite(RecHandle h_file, char *buf, int size, int *bytes_written)
 {
-  if ((*bytes_written =::write(h_file, buf, size)) < 0) {
+  if ((*bytes_written = ::write(h_file, buf, size)) < 0) {
     *bytes_written = 0;
     return REC_ERR_FAIL;
   }
@@ -109,7 +111,7 @@ RecFileGetSize(RecHandle h_file)
 {
   struct stat fileStats;
   fstat(h_file, &fileStats);
-  return (int) fileStats.st_size;
+  return (int)fileStats.st_size;
 }
 
 //-------------------------------------------------------------------------
@@ -125,7 +127,6 @@ RecFileExists(const char *file)
   }
   RecFileClose(h_file);
   return REC_ERR_OKAY;
-
 }
 
 //-------------------------------------------------------------------------
@@ -135,7 +136,6 @@ RecFileExists(const char *file)
 RecHandle
 RecPipeCreate(const char *base_path, const char *name)
 {
-
   RecHandle listenfd;
   RecHandle acceptfd;
   struct sockaddr_un servaddr;
@@ -166,8 +166,9 @@ RecPipeCreate(const char *base_path, const char *name)
     return REC_HANDLE_INVALID;
   }
   // set so that child process doesn't inherit our fd
-  if (fcntl(listenfd, F_SETFD, 1) < 0) {
+  if (fcntl(listenfd, F_SETFD, FD_CLOEXEC) < 0) {
     RecLog(DL_Warning, "[RecPipeCreate] fcntl error\n");
+    close(listenfd);
     return REC_HANDLE_INVALID;
   }
 
@@ -176,13 +177,14 @@ RecPipeCreate(const char *base_path, const char *name)
   ink_strlcpy(servaddr.sun_path, path, sizeof(servaddr.sun_path));
 
   int optval = 1;
-  if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, (char *) &optval, sizeof(int)) < 0) {
+  if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval, sizeof(int)) < 0) {
     RecLog(DL_Warning, "[RecPipeCreate] setsockopt error\n");
+    close(listenfd);
     return REC_HANDLE_INVALID;
   }
 
   servaddr_len = sizeof(servaddr.sun_family) + strlen(servaddr.sun_path);
-  if ((bind(listenfd, (struct sockaddr *) &servaddr, servaddr_len)) < 0) {
+  if ((bind(listenfd, (struct sockaddr *)&servaddr, servaddr_len)) < 0) {
     RecLog(DL_Warning, "[RecPipeCreate] bind error\n");
     close(listenfd);
     return REC_HANDLE_INVALID;
@@ -195,8 +197,7 @@ RecPipeCreate(const char *base_path, const char *name)
   }
   // block until we get a connection from the other side
   cliaddr_len = sizeof(cliaddr);
-  if ((acceptfd = accept(listenfd, (struct sockaddr *) &cliaddr,
-                         &cliaddr_len)) < 0) {
+  if ((acceptfd = accept(listenfd, (struct sockaddr *)&cliaddr, &cliaddr_len)) < 0) {
     close(listenfd);
     return REC_HANDLE_INVALID;
   }
@@ -213,7 +214,6 @@ RecPipeCreate(const char *base_path, const char *name)
 RecHandle
 RecPipeConnect(const char *base_path, const char *name)
 {
-
   RecHandle sockfd;
   struct sockaddr_un servaddr;
   int servaddr_len;
@@ -226,7 +226,7 @@ RecPipeConnect(const char *base_path, const char *name)
     return REC_HANDLE_INVALID;
   }
   // Setup Connection to LocalManager */
-  memset((char *) &servaddr, 0, sizeof(servaddr));
+  memset((char *)&servaddr, 0, sizeof(servaddr));
   servaddr.sun_family = AF_UNIX;
   ink_strlcpy(servaddr.sun_path, path, sizeof(servaddr.sun_path));
   servaddr_len = sizeof(servaddr.sun_family) + strlen(servaddr.sun_path);
@@ -236,13 +236,13 @@ RecPipeConnect(const char *base_path, const char *name)
     return REC_HANDLE_INVALID;
   }
   // set so that child process doesn't inherit our fd
-  if (fcntl(sockfd, F_SETFD, 1) < 0) {
+  if (fcntl(sockfd, F_SETFD, FD_CLOEXEC) < 0) {
     RecLog(DL_Warning, "[RecPipeConnect] fcntl error\n");
     close(sockfd);
     return REC_HANDLE_INVALID;
   }
   // blocking connect
-  if ((connect(sockfd, (struct sockaddr *) &servaddr, servaddr_len)) < 0) {
+  if ((connect(sockfd, (struct sockaddr *)&servaddr, servaddr_len)) < 0) {
     RecLog(DL_Warning, "[RecPipeConnect] connect error\n");
     close(sockfd);
     return REC_HANDLE_INVALID;
@@ -258,9 +258,9 @@ RecPipeConnect(const char *base_path, const char *name)
 int
 RecPipeRead(RecHandle h_pipe, char *buf, int size)
 {
-  int bytes_read = 0;
+  int bytes_read   = 0;
   int bytes_wanted = size;
-  char *p = buf;
+  char *p          = buf;
   while (bytes_wanted > 0) {
     bytes_read = read(h_pipe, p, bytes_wanted);
     if (bytes_read < 0) {
@@ -280,9 +280,9 @@ RecPipeRead(RecHandle h_pipe, char *buf, int size)
 int
 RecPipeWrite(RecHandle h_pipe, char *buf, int size)
 {
-  int bytes_written = 0;
+  int bytes_written  = 0;
   int bytes_to_write = size;
-  char *p = buf;
+  char *p            = buf;
   while (bytes_to_write > 0) {
     bytes_written = write(h_pipe, p, bytes_to_write);
     if (bytes_written < 0) {

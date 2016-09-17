@@ -294,7 +294,10 @@
 #define LOG_H
 
 #include <stdarg.h>
-#include "libts.h"
+#include "ts/ink_platform.h"
+#include "ts/EventNotify.h"
+#include "ts/ink_hash_table.h"
+#include "ts/Regression.h"
 #include "P_RecProcess.h"
 #include "LogFile.h"
 #include "LogBuffer.h"
@@ -303,7 +306,7 @@ class LogAccess;
 class LogFieldList;
 class LogFilterList;
 class LogFormatList;
-//class LogBufferList; vl: we don't need it here
+// class LogBufferList; vl: we don't need it here
 struct LogBufferHeader;
 class LogFile;
 class LogBuffer;
@@ -321,11 +324,7 @@ public:
   void *m_data;
   int m_len;
 
-  LogFlushData(LogFile *logfile, void *data, int len = -1):
-    m_logfile(logfile), m_data(data), m_len(len)
-  {
-  }
-
+  LogFlushData(LogFile *logfile, void *data, int len = -1) : m_logfile(logfile), m_data(data), m_len(len) {}
   ~LogFlushData()
   {
     switch (m_logfile->m_file_format) {
@@ -353,39 +352,33 @@ public:
 class Log
 {
 public:
-
-  enum ReturnCodeFlags
-  {
+  enum ReturnCodeFlags {
     LOG_OK = 1,
-    SKIP = 2,
-    AGGR = 4,
-    FAIL = 8,
-    FULL = 16
+    SKIP   = 2,
+    AGGR   = 4,
+    FAIL   = 8,
+    FULL   = 16,
   };
 
-  enum LoggingMode
-  {
+  enum LoggingMode {
     LOG_MODE_NONE = 0,
-    LOG_MODE_ERRORS,        // log *only* errors
-    LOG_MODE_TRANSACTIONS,  // log *only* transactions
+    LOG_MODE_ERRORS,       // log *only* errors
+    LOG_MODE_TRANSACTIONS, // log *only* transactions
     LOG_MODE_FULL
   };
 
-  enum InitFlags
-  {
+  enum InitFlags {
     FIELDS_INITIALIZED = 1,
-    FULLY_INITIALIZED = 2
+    FULLY_INITIALIZED  = 2,
   };
 
-  enum ConfigFlags
-  {
+  enum ConfigFlags {
     NO_REMOTE_MANAGEMENT = 1,
-    STANDALONE_COLLATOR = 2,
-    LOGCAT = 4
+    STANDALONE_COLLATOR  = 2,
+    LOGCAT               = 4,
   };
 
-  enum CollationMode
-  {
+  enum CollationMode {
     NO_COLLATION = 0,
     COLLATION_HOST,
     SEND_STD_FMTS,
@@ -394,8 +387,7 @@ public:
     N_COLLATION_MODES
   };
 
-  enum RollingEnabledValues
-  {
+  enum RollingEnabledValues {
     NO_ROLLING = 0,
     ROLL_ON_TIME_ONLY,
     ROLL_ON_SIZE_ONLY,
@@ -404,35 +396,44 @@ public:
     INVALID_ROLLING_VALUE
   };
 
-  enum
-  {
-    MIN_ROLLING_INTERVAL_SEC = 60,   // 5 minute minimum rolling interval
-    MAX_ROLLING_INTERVAL_SEC = 86400  // 24 hrs rolling interval max
+  enum {
+    MIN_ROLLING_INTERVAL_SEC = 30,   // 30 second minimum rolling interval
+    MAX_ROLLING_INTERVAL_SEC = 86400 // 24 hrs rolling interval max
   };
 
   // main interface
   static void init(int configFlags = 0);
   static void init_fields();
-  inkcoreapi static bool transaction_logging_enabled()
+
+  inkcoreapi static bool
+  transaction_logging_enabled()
   {
     return (logging_mode == LOG_MODE_FULL || logging_mode == LOG_MODE_TRANSACTIONS);
   }
 
-  inkcoreapi static bool error_logging_enabled()
+  inkcoreapi static bool
+  error_logging_enabled()
   {
     return (logging_mode == LOG_MODE_FULL || logging_mode == LOG_MODE_ERRORS);
   }
 
-  inkcoreapi static int access(LogAccess * lad);
+  inkcoreapi static int access(LogAccess *lad);
   inkcoreapi static int va_error(const char *format, va_list ap);
   inkcoreapi static int error(const char *format, ...) TS_PRINTFLIKE(1, 2);
+
+  /////////////////////////////////////////////////////////////////////////
+  // 'Wire tracing' enabled by source ip or by percentage of connections //
+  /////////////////////////////////////////////////////////////////////////
+  static void trace_in(const sockaddr *peer_addr, uint16_t peer_port, const char *format_string, ...) TS_PRINTFLIKE(3, 4);
+  static void trace_out(const sockaddr *peer_addr, uint16_t peer_port, const char *format_string, ...) TS_PRINTFLIKE(3, 4);
+  static void trace_va(bool in, const sockaddr *peer_addr, uint16_t peer_port, const char *format_string, va_list ap);
 
   // public data members
   inkcoreapi static LogObject *error_log;
   static LogConfig *config;
   static LogFieldList global_field_list;
-//    static LogBufferList global_buffer_full_list; vl: not used
-//    static LogBufferList global_buffer_delete_list; vl: not used
+  //    static LogBufferList global_buffer_full_list; vl: not used
+  //    static LogBufferList global_buffer_delete_list; vl: not used
   static InkHashTable *field_symbol_hash;
   static LogFormat *global_scrap_format;
   static LogObject *global_scrap_object;
@@ -452,17 +453,18 @@ public:
   static int collation_accept_file_descriptor;
   static int collation_port;
   static void *collate_thread_main(void *args);
-  static LogObject *match_logobject(LogBufferHeader * header);
+  static LogObject *match_logobject(LogBufferHeader *header);
 
   // reconfiguration stuff
   static void change_configuration();
   static int handle_logging_mode_change(const char *name, RecDataT data_type, RecData data, void *cookie);
+  static int handle_periodic_tasks_int_change(const char *name, RecDataT data_type, RecData data, void *cookie);
 
-  Log();                        // shut up stupid DEC C++ compiler
+  Log(); // shut up stupid DEC C++ compiler
 
   friend void RegressionTest_LogObjectManager_Transfer(RegressionTest *, int, int *);
-private:
 
+private:
   static void periodic_tasks(long time_now);
   static void create_threads();
   static void init_when_enabled();
@@ -470,17 +472,29 @@ private:
   static int init_status;
   static int config_flags;
   static bool logging_mode_changed;
+  static uint32_t periodic_tasks_interval;
 
   // -- member functions that are not allowed --
-  Log(const Log & rhs);
-  Log & operator=(const Log & rhs);
+  Log(const Log &rhs);
+  Log &operator=(const Log &rhs);
 };
-
 
 static inline bool
 LogRollingEnabledIsValid(int enabled)
 {
   return (enabled >= Log::NO_ROLLING || enabled < Log::INVALID_ROLLING_VALUE);
 }
+
+#define TraceIn(flag, ...)        \
+  do {                            \
+    if (unlikely(flag))           \
+      Log::trace_in(__VA_ARGS__); \
+  } while (0)
+
+#define TraceOut(flag, ...)        \
+  do {                             \
+    if (unlikely(flag))            \
+      Log::trace_out(__VA_ARGS__); \
+  } while (0)
 
 #endif

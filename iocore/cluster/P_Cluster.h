@@ -24,7 +24,7 @@
 #ifndef _P_CLUSTER_H__
 #define _P_CLUSTER_H__
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 #include "P_EventSystem.h"
 #include "I_RecProcess.h"
 #include "P_Net.h"
@@ -46,18 +46,16 @@
 #include "P_ClusterLoadMonitor.h"
 #include "P_TimeTrace.h"
 
-
-#define ECLUSTER_NO_VC                    (CLUSTER_ERRNO+0)
-#define ECLUSTER_NO_MACHINE               (CLUSTER_ERRNO+1)
-#define ECLUSTER_OP_TIMEOUT               (CLUSTER_ERRNO+2)
-#define ECLUSTER_ORB_DATA_READ            (CLUSTER_ERRNO+3)
-#define ECLUSTER_ORB_EIO                  (CLUSTER_ERRNO+4)
-#define ECLUSTER_CHANNEL_INUSE            (CLUSTER_ERRNO+5)
-#define ECLUSTER_NOMORE_CHANNELS          (CLUSTER_ERRNO+6)
+#define ECLUSTER_NO_VC (CLUSTER_ERRNO + 0)
+#define ECLUSTER_NO_MACHINE (CLUSTER_ERRNO + 1)
+#define ECLUSTER_OP_TIMEOUT (CLUSTER_ERRNO + 2)
+#define ECLUSTER_ORB_DATA_READ (CLUSTER_ERRNO + 3)
+#define ECLUSTER_ORB_EIO (CLUSTER_ERRNO + 4)
+#define ECLUSTER_CHANNEL_INUSE (CLUSTER_ERRNO + 5)
+#define ECLUSTER_NOMORE_CHANNELS (CLUSTER_ERRNO + 6)
 
 int init_clusterprocessor(void);
-enum
-{
+enum {
   CLUSTER_CONNECTIONS_OPEN_STAT,
   CLUSTER_CONNECTIONS_OPENNED_STAT,
   CLUSTER_CON_TOTAL_TIME_STAT,
@@ -124,19 +122,14 @@ enum
 };
 
 extern RecRawStatBlock *cluster_rsb;
-#define CLUSTER_INCREMENT_DYN_STAT(x) \
-	RecIncrRawStat(cluster_rsb, mutex->thread_holding, (int) x, 1);
-#define CLUSTER_DECREMENT_DYN_STAT(x) \
-	RecIncrRawStat(cluster_rsb, mutex->thread_holding, (int) x, -1);
-#define CLUSTER_SUM_DYN_STAT(x, y) \
-	RecIncrRawStat(cluster_rsb, mutex->thread_holding, (int) x, y);
-#define CLUSTER_SUM_GLOBAL_DYN_STAT(x, y) \
-	RecIncrGlobalRawStatSum(cluster_rsb,x,y)
-#define CLUSTER_CLEAR_DYN_STAT(x) \
-do { \
-	RecSetRawStatSum(cluster_rsb, x, 0); \
-	RecSetRawStatCount(cluster_rsb, x, 0); \
-} while (0);
-
+#define CLUSTER_INCREMENT_DYN_STAT(x) RecIncrRawStat(cluster_rsb, mutex->thread_holding, (int)x, 1);
+#define CLUSTER_DECREMENT_DYN_STAT(x) RecIncrRawStat(cluster_rsb, mutex->thread_holding, (int)x, -1);
+#define CLUSTER_SUM_DYN_STAT(x, y) RecIncrRawStat(cluster_rsb, mutex->thread_holding, (int)x, y);
+#define CLUSTER_SUM_GLOBAL_DYN_STAT(x, y) RecIncrGlobalRawStatSum(cluster_rsb, x, y)
+#define CLUSTER_CLEAR_DYN_STAT(x)          \
+  do {                                     \
+    RecSetRawStatSum(cluster_rsb, x, 0);   \
+    RecSetRawStatCount(cluster_rsb, x, 0); \
+  } while (0);
 
 #endif

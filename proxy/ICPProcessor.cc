@@ -35,7 +35,7 @@
 //  Wrapper Class to hide the true internals of ICPProcessor.
 //  Used only for external access.
 //**************************************************************
-ICPProcessorExt::ICPProcessorExt(ICPProcessor * icpPr):_ICPpr(icpPr)
+ICPProcessorExt::ICPProcessorExt(ICPProcessor *icpPr) : _ICPpr(icpPr)
 {
 }
 
@@ -49,9 +49,8 @@ ICPProcessorExt::start()
   _ICPpr->start();
 }
 
-
 Action *
-ICPProcessorExt::ICPQuery(Continuation * c, URL * url)
+ICPProcessorExt::ICPQuery(Continuation *c, URL *url)
 {
   return _ICPpr->ICPQuery(c, url);
 }

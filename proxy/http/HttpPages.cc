@@ -36,25 +36,21 @@
 
 HttpSMListBucket HttpSMList[HTTP_LIST_BUCKETS];
 
-HttpPagesHandler::HttpPagesHandler(Continuation * cont, HTTPHdr * header)
-  : BaseStatPagesHandler(new_ProxyMutex()),
-    request(NULL),
-    list_bucket(0),
-    state(HP_INIT),
-    sm_id(0)
+HttpPagesHandler::HttpPagesHandler(Continuation *cont, HTTPHdr *header)
+  : BaseStatPagesHandler(new_ProxyMutex()), request(NULL), list_bucket(0), state(HP_INIT), sm_id(0)
 {
   action = cont;
 
   URL *url;
   int length;
 
-  url = header->url_get();
-  request = (char *) url->path_get(&length);
+  url     = header->url_get();
+  request = (char *)url->path_get(&length);
   request = arena.str_store(request, length);
 
   if (strncmp(request, "sm_details", sizeof("sm_details")) == 0) {
     arena.str_free(request);
-    request = (char *) url->query_get(&length);
+    request = (char *)url->query_get(&length);
     request = arena.str_store(request, length);
     SET_HANDLER(&HttpPagesHandler::handle_smdetails);
 
@@ -73,7 +69,7 @@ HttpPagesHandler::extract_id(const char *query)
   char *p;
   int64_t id;
 
-  p = (char *) strstr(query, "id=");
+  p = (char *)strstr(query, "id=");
   if (!p) {
     return -1;
   }
@@ -96,7 +92,6 @@ HttpPagesHandler::extract_id(const char *query)
 void
 HttpPagesHandler::dump_hdr(HTTPHdr *hdr, const char *desc)
 {
-
   if (hdr->valid()) {
     resp_add("<h4> %s </h4>\n<pre>\n", desc);
     char b[4096];
@@ -105,7 +100,7 @@ HttpPagesHandler::dump_hdr(HTTPHdr *hdr, const char *desc)
     offset = 0;
     do {
       used = 0;
-      tmp = offset;
+      tmp  = offset;
       done = hdr->print(b, 4095, &used, &tmp);
       offset += used;
       b[used] = '\0';
@@ -116,7 +111,7 @@ HttpPagesHandler::dump_hdr(HTTPHdr *hdr, const char *desc)
 }
 
 void
-HttpPagesHandler::dump_tunnel_info(HttpSM * sm)
+HttpPagesHandler::dump_tunnel_info(HttpSM *sm)
 {
   HttpTunnel *t = sm->get_tunnel();
 
@@ -161,7 +156,6 @@ HttpPagesHandler::dump_tunnel_info(HttpSM * sm)
   }
   resp_end_table();
 
-
   resp_add("<p> Consumers </p>");
   resp_begin_table(1, 5, 60);
   for (int j = 0; j < MAX_CONSUMERS; j++) {
@@ -205,16 +199,14 @@ HttpPagesHandler::dump_tunnel_info(HttpSM * sm)
       }
       resp_end_column();
 
-
       resp_end_row();
     }
   }
   resp_end_table();
-
 }
 
 void
-HttpPagesHandler::dump_history(HttpSM * sm)
+HttpPagesHandler::dump_history(HttpSM *sm)
 {
   resp_add("<h4> History</h4>");
   resp_begin_table(1, 3, 60);
@@ -237,11 +229,11 @@ HttpPagesHandler::dump_history(HttpSM * sm)
     resp_end_column();
 
     resp_begin_column();
-    resp_add("%u", (unsigned int) sm->history[i].event);
+    resp_add("%u", (unsigned int)sm->history[i].event);
     resp_end_column();
 
     resp_begin_column();
-    resp_add("%d", (int) sm->history[i].reentrancy);
+    resp_add("%d", (int)sm->history[i].reentrancy);
     resp_end_column();
 
     resp_end_row();
@@ -251,7 +243,7 @@ HttpPagesHandler::dump_history(HttpSM * sm)
 }
 
 int
-HttpPagesHandler::dump_sm(HttpSM * sm)
+HttpPagesHandler::dump_sm(HttpSM *sm)
 {
   // Dump the current state
   const char *sm_state = HttpDebugNames::get_action_name(sm->t_state.next_action);
@@ -275,7 +267,7 @@ int
 HttpPagesHandler::handle_smdetails(int event, void * /* data ATS_UNUSED */)
 {
   EThread *ethread = this_ethread();
-  HttpSM *sm = NULL;
+  HttpSM *sm       = NULL;
 
   switch (event) {
   case EVENT_NONE:
@@ -299,7 +291,6 @@ HttpPagesHandler::handle_smdetails(int event, void * /* data ATS_UNUSED */)
       resp_add("<b>Unable to extract id</b>\n");
       resp_end();
       return handle_callback(EVENT_NONE, NULL);
-
     }
 
     resp_begin("Http:SM Details");
@@ -340,7 +331,6 @@ HttpPagesHandler::handle_smdetails(int event, void * /* data ATS_UNUSED */)
     }
   }
 
-
   // If we got here, we did not find our state machine
   resp_add("<h2>Id %" PRId64 " not found</h2>", sm_id);
   resp_end();
@@ -348,7 +338,7 @@ HttpPagesHandler::handle_smdetails(int event, void * /* data ATS_UNUSED */)
 }
 
 int
-HttpPagesHandler::handle_smlist(int event, void */* data ATS_UNUSED */)
+HttpPagesHandler::handle_smlist(int event, void * /* data ATS_UNUSED */)
 {
   EThread *ethread = this_ethread();
   HttpSM *sm;
@@ -379,8 +369,7 @@ HttpPagesHandler::handle_smlist(int event, void */* data ATS_UNUSED */)
     sm = HttpSMList[list_bucket].sm_list.head;
 
     while (sm != NULL) {
-
-      char *url = NULL;
+      char *url          = NULL;
       const char *method = NULL;
       int method_len;
       const char *sm_state = NULL;
@@ -402,18 +391,18 @@ HttpPagesHandler::handle_smlist(int event, void */* data ATS_UNUSED */)
           }
 
           if (url == NULL) {
-            url = arena.str_store("-", 1);
+            url      = arena.str_store("-", 1);
             sm_state = "READ_REQUEST";
           }
         } else {
-          url = arena.str_store("-", 1);
+          url      = arena.str_store("-", 1);
           sm_state = "LOCKED";
         }
       }
 
       resp_begin_item();
-      resp_add("id: <a href=\"./sm_details?id=%" PRId64 "\"> %" PRId64 " </a> | %s %s | %s\n",
-               sm->sm_id, sm->sm_id, method ? method : "", url, sm_state ? sm_state : "");
+      resp_add("id: <a href=\"./sm_details?id=%" PRId64 "\"> %" PRId64 " </a> | %s %s | %s\n", sm->sm_id, sm->sm_id,
+               method ? method : "", url, sm_state ? sm_state : "");
       resp_end_item();
       arena.str_free(url);
 
@@ -441,10 +430,10 @@ HttpPagesHandler::handle_callback(int /* event ATS_UNUSED */, void * /* edata AT
     if (response) {
       StatPageData data;
 
-      data.data = response;
-      data.type = ats_strdup("text/html");
+      data.data   = response;
+      data.type   = ats_strdup("text/html");
       data.length = response_length;
-      response = NULL;
+      response    = NULL;
 
       action.continuation->handleEvent(STAT_PAGE_SUCCESS, &data);
     } else {
@@ -457,7 +446,7 @@ HttpPagesHandler::handle_callback(int /* event ATS_UNUSED */, void * /* edata AT
 }
 
 static Action *
-http_pages_callback(Continuation * cont, HTTPHdr * header)
+http_pages_callback(Continuation *cont, HTTPHdr *header)
 {
   HttpPagesHandler *handler;
 
@@ -476,5 +465,4 @@ http_pages_init()
   for (int i = 0; i < HTTP_LIST_BUCKETS; i++) {
     HttpSMList[i].mutex = new_ProxyMutex();
   }
-
 }

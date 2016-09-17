@@ -25,7 +25,7 @@
 // include files
 //-------------------------------------------------------------------------
 
-#include "libts.h"
+#include "ts/ink_platform.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +59,7 @@ int LogCollationClientSM::ID = 0;
 // LogCollationClientSM::LogCollationClientSM
 //-------------------------------------------------------------------------
 
-LogCollationClientSM::LogCollationClientSM(LogHost * log_host)
+LogCollationClientSM::LogCollationClientSM(LogHost *log_host)
   : Continuation(new_ProxyMutex()),
     m_host_vc(NULL),
     m_host_vio(NULL),
@@ -87,9 +87,8 @@ LogCollationClientSM::LogCollationClientSM(LogHost * log_host)
   m_buffer_send_list = new LogBufferList();
   ink_assert(m_buffer_send_list != NULL);
 
-  SET_HANDLER((LogCollationClientSMHandler) & LogCollationClientSM::client_handler);
+  SET_HANDLER((LogCollationClientSMHandler)&LogCollationClientSM::client_handler);
   client_init(LOG_COLL_EVENT_SWITCH, NULL);
-
 }
 
 //-------------------------------------------------------------------------
@@ -122,9 +121,9 @@ LogCollationClientSM::client_handler(int event, void *data)
 {
   switch (m_client_state) {
   case LOG_COLL_CLIENT_AUTH:
-    return client_auth(event, (VIO *) data);
+    return client_auth(event, (VIO *)data);
   case LOG_COLL_CLIENT_DNS:
-    return client_dns(event, (HostDBInfo *) data);
+    return client_dns(event, (HostDBInfo *)data);
   case LOG_COLL_CLIENT_DONE:
     return client_done(event, data);
   case LOG_COLL_CLIENT_FAIL:
@@ -134,9 +133,9 @@ LogCollationClientSM::client_handler(int event, void *data)
   case LOG_COLL_CLIENT_INIT:
     return client_init(event, data);
   case LOG_COLL_CLIENT_OPEN:
-    return client_open(event, (NetVConnection *) data);
+    return client_open(event, (NetVConnection *)data);
   case LOG_COLL_CLIENT_SEND:
-    return client_send(event, (VIO *) data);
+    return client_send(event, (VIO *)data);
   default:
     ink_assert(!"unexpcted state");
     return EVENT_CONT;
@@ -156,7 +155,7 @@ LogCollationClientSM::client_handler(int event, void *data)
 //-------------------------------------------------------------------------
 
 int
-LogCollationClientSM::send(LogBuffer * log_buffer)
+LogCollationClientSM::send(LogBuffer *log_buffer)
 {
   ip_port_text_buffer ipb;
 
@@ -188,7 +187,8 @@ LogCollationClientSM::send(LogBuffer * log_buffer)
   if (m_buffer_send_list->get_size() >= Log::config->collation_max_send_buffers) {
     Debug("log-coll", "[%d]client::send - m_flow = DENY", m_id);
     Note("[log-coll] send-queue full; orphaning logs      "
-         "[%s:%u]", m_log_host->ip_addr().toString(ipb, sizeof(ipb)), m_log_host->port());
+         "[%s:%u]",
+         m_log_host->ip_addr().toString(ipb, sizeof(ipb)), m_log_host->port());
     m_flow = LOG_COLL_FLOW_DENY;
   }
   // compute return value
@@ -203,8 +203,8 @@ LogCollationClientSM::send(LogBuffer * log_buffer)
     m_client_state = LOG_COLL_CLIENT_SEND;
     ink_assert(m_pending_event == NULL);
     m_pending_event = eventProcessor.schedule_imm(this);
-    //eventProcessor.schedule_imm(this);
-    //client_send(LOG_COLL_EVENT_SWITCH, NULL);
+    // eventProcessor.schedule_imm(this);
+    // client_send(LOG_COLL_EVENT_SWITCH, NULL);
   }
 
   ink_mutex_release(&(mutex->the_mutex));
@@ -232,28 +232,27 @@ LogCollationClientSM::client_auth(int event, VIO * /* vio ATS_UNUSED */)
   Debug("log-coll", "[%d]client::client_auth", m_id);
 
   switch (event) {
-  case LOG_COLL_EVENT_SWITCH:
-    {
-      Debug("log-coll", "[%d]client::client_auth - SWITCH", m_id);
-      m_client_state = LOG_COLL_CLIENT_AUTH;
+  case LOG_COLL_EVENT_SWITCH: {
+    Debug("log-coll", "[%d]client::client_auth - SWITCH", m_id);
+    m_client_state = LOG_COLL_CLIENT_AUTH;
 
-      NetMsgHeader nmh;
-      int bytes_to_send = (int) strlen(Log::config->collation_secret);
-      nmh.msg_bytes = bytes_to_send;
+    NetMsgHeader nmh;
+    int bytes_to_send = (int)strlen(Log::config->collation_secret);
+    nmh.msg_bytes     = bytes_to_send;
 
-      // memory copies, I know...  but it happens rarely!!!  ^_^
-      ink_assert(m_auth_buffer != NULL);
-      m_auth_buffer->write((char *) &nmh, sizeof(NetMsgHeader));
-      m_auth_buffer->write(Log::config->collation_secret, bytes_to_send);
-      bytes_to_send += sizeof(NetMsgHeader);
+    // memory copies, I know...  but it happens rarely!!!  ^_^
+    ink_assert(m_auth_buffer != NULL);
+    m_auth_buffer->write((char *)&nmh, sizeof(NetMsgHeader));
+    m_auth_buffer->write(Log::config->collation_secret, bytes_to_send);
+    bytes_to_send += sizeof(NetMsgHeader);
 
-      Debug("log-coll", "[%d]client::client_auth - do_io_write(%d)", m_id, bytes_to_send);
-      ink_assert(m_host_vc != NULL);
-      m_host_vio = m_host_vc->do_io_write(this, bytes_to_send, m_auth_reader);
-      ink_assert(m_host_vio != NULL);
+    Debug("log-coll", "[%d]client::client_auth - do_io_write(%d)", m_id, bytes_to_send);
+    ink_assert(m_host_vc != NULL);
+    m_host_vio = m_host_vc->do_io_write(this, bytes_to_send, m_auth_reader);
+    ink_assert(m_host_vio != NULL);
 
-      return EVENT_CONT;
-    }
+    return EVENT_CONT;
+  }
 
   case VC_EVENT_WRITE_READY:
     Debug("log-coll", "[%d]client::client_auth - WRITE_READY", m_id);
@@ -267,19 +266,20 @@ LogCollationClientSM::client_auth(int event, VIO * /* vio ATS_UNUSED */)
 
     return client_send(LOG_COLL_EVENT_SWITCH, NULL);
 
+  case VC_EVENT_ACTIVE_TIMEOUT:
+  case VC_EVENT_INACTIVITY_TIMEOUT:
   case VC_EVENT_EOS:
-  case VC_EVENT_ERROR:
-    {
-      Debug("log-coll", "[%d]client::client_auth - EOS|ERROR", m_id);
-      int64_t read_avail = m_auth_reader->read_avail();
+  case VC_EVENT_ERROR: {
+    Debug("log-coll", "[%d]client::client_auth - TIMEOUT|EOS|ERROR", m_id);
+    int64_t read_avail = m_auth_reader->read_avail();
 
-      if (read_avail > 0) {
-        Debug("log-coll", "[%d]client::client_auth - consuming unsent data", m_id);
-        m_auth_reader->consume(read_avail);
-      }
-
-      return client_fail(LOG_COLL_EVENT_SWITCH, NULL);
+    if (read_avail > 0) {
+      Debug("log-coll", "[%d]client::client_auth - consuming unsent data", m_id);
+      m_auth_reader->consume(read_avail);
     }
+
+    return client_fail(LOG_COLL_EVENT_SWITCH, NULL);
+  }
 
   default:
     ink_assert(!"unexpected event");
@@ -292,7 +292,7 @@ LogCollationClientSM::client_auth(int event, VIO * /* vio ATS_UNUSED */)
 // next: client_open || client_done
 //-------------------------------------------------------------------------
 int
-LogCollationClientSM::client_dns(int event, HostDBInfo * hostdb_info)
+LogCollationClientSM::client_dns(int event, HostDBInfo *hostdb_info)
 {
   Debug("log-coll", "[%d]client::client_dns", m_id);
 
@@ -318,9 +318,7 @@ LogCollationClientSM::client_dns(int event, HostDBInfo * hostdb_info)
   default:
     ink_assert(!"unexpected event");
     return EVENT_CONT;
-
   }
-
 }
 
 //-------------------------------------------------------------------------
@@ -383,9 +381,7 @@ LogCollationClientSM::client_done(int event, void * /* data ATS_UNUSED */)
   default:
     ink_assert(!"unexpected event");
     return EVENT_DONE;
-
   }
-
 }
 
 //-------------------------------------------------------------------------
@@ -409,9 +405,8 @@ LogCollationClientSM::client_fail(int event, void * /* data ATS_UNUSED */)
     if (m_host_is_up) {
       Note("[log-coll] host down [%s:%u]", m_log_host->ip_addr().toString(ipb, sizeof ipb), m_log_host->m_port);
       char msg_buf[128];
-      snprintf(msg_buf, sizeof(msg_buf), "Collation host %s:%u down",
-               m_log_host->ip_addr().toString(ipb, sizeof ipb), m_log_host->m_port
-      );
+      snprintf(msg_buf, sizeof(msg_buf), "Collation host %s:%u down", m_log_host->ip_addr().toString(ipb, sizeof ipb),
+               m_log_host->m_port);
       RecSignalManager(MGMT_SIGNAL_SAC_SERVER_DOWN, msg_buf);
       m_host_is_up = false;
     }
@@ -438,7 +433,6 @@ LogCollationClientSM::client_fail(int event, void * /* data ATS_UNUSED */)
   default:
     ink_assert(!"unexpected event");
     return EVENT_CONT;
-
   }
 }
 
@@ -457,15 +451,16 @@ LogCollationClientSM::client_idle(int event, void * /* data ATS_UNUSED */)
     m_client_state = LOG_COLL_CLIENT_IDLE;
     return EVENT_CONT;
 
+  case VC_EVENT_ACTIVE_TIMEOUT:
+  case VC_EVENT_INACTIVITY_TIMEOUT:
   case VC_EVENT_EOS:
   case VC_EVENT_ERROR:
-    Debug("log-coll", "[%d]client::client_idle - EOS|ERROR", m_id);
+    Debug("log-coll", "[%d]client::client_idle - TIMEOUT|EOS|ERROR", m_id);
     return client_fail(LOG_COLL_EVENT_SWITCH, NULL);
 
   default:
     ink_assert(!"unexpcted state");
     return EVENT_CONT;
-
   }
 }
 
@@ -505,7 +500,7 @@ LogCollationClientSM::client_init(int event, void * /* data ATS_UNUSED */)
     ink_assert(m_abort_buffer != NULL);
 
     // if we don't have an ip already, switch to client_dns
-    if (! m_log_host->ip_addr().isValid()) {
+    if (!m_log_host->ip_addr().isValid()) {
       return client_dns(LOG_COLL_EVENT_SWITCH, NULL);
     } else {
       return client_open(LOG_COLL_EVENT_SWITCH, NULL);
@@ -514,7 +509,6 @@ LogCollationClientSM::client_init(int event, void * /* data ATS_UNUSED */)
   default:
     ink_assert(!"unexpected state");
     return EVENT_CONT;
-
   }
 }
 
@@ -524,8 +518,10 @@ LogCollationClientSM::client_init(int event, void * /* data ATS_UNUSED */)
 //-------------------------------------------------------------------------
 
 int
-LogCollationClientSM::client_open(int event, NetVConnection * net_vc)
+LogCollationClientSM::client_open(int event, NetVConnection *net_vc)
 {
+  RecInt rec_timeout;
+  int timeout = 86400;
   ip_port_text_buffer ipb;
   Debug("log-coll", "[%d]client::client_open", m_id);
 
@@ -549,15 +545,19 @@ LogCollationClientSM::client_open(int event, NetVConnection * net_vc)
     return EVENT_CONT;
 
   case NET_EVENT_OPEN:
-    Debug("log-coll", "[%d]client::client_open - %s:%u", m_id,
-          m_log_host->ip_addr().toString(ipb, sizeof ipb), m_log_host->port()
-    );
+    Debug("log-coll", "[%d]client::client_open - %s:%u", m_id, m_log_host->ip_addr().toString(ipb, sizeof ipb), m_log_host->port());
 
     // callback complete, reset m_pending_action
     m_pending_action = NULL;
 
     ink_assert(net_vc != NULL);
     m_host_vc = net_vc;
+
+    // assign an explicit inactivity timeout so that it will not get the default value later
+    if (RecGetRecordInt("proxy.config.log.collation_client_timeout", &rec_timeout) == REC_ERR_OKAY) {
+      timeout = rec_timeout;
+    }
+    m_host_vc->set_inactivity_timeout(HRTIME_SECONDS(timeout));
 
     // setup a client reader just for detecting a host disconnnect
     // (iocore should call back this function with and EOS/ERROR)
@@ -575,7 +575,6 @@ LogCollationClientSM::client_open(int event, NetVConnection * net_vc)
   default:
     ink_assert(!"unexpected event");
     return EVENT_CONT;
-
   }
 }
 
@@ -597,66 +596,63 @@ LogCollationClientSM::client_send(int event, VIO * /* vio ATS_UNUSED */)
     // callback complete, reset m_pending_event
     m_pending_event = NULL;
 
-    // fall through to LOG_COLL_EVENT_SWITCH
+  // fall through to LOG_COLL_EVENT_SWITCH
 
-  case LOG_COLL_EVENT_SWITCH:
-    {
-      Debug("log-coll", "[%d]client::client_send - SWITCH", m_id);
-      m_client_state = LOG_COLL_CLIENT_SEND;
+  case LOG_COLL_EVENT_SWITCH: {
+    Debug("log-coll", "[%d]client::client_send - SWITCH", m_id);
+    m_client_state = LOG_COLL_CLIENT_SEND;
 
-      // get a buffer off our queue
-      ink_assert(m_buffer_send_list != NULL);
-      ink_assert(m_buffer_in_iocore == NULL);
-      if ((m_buffer_in_iocore = m_buffer_send_list->get()) == NULL) {
-        return client_idle(LOG_COLL_EVENT_SWITCH, NULL);
-      }
-      Debug("log-coll", "[%d]client::client_send - send_list to m_buffer_in_iocore", m_id);
-      Debug("log-coll", "[%d]client::client_send - send_list_size(%d)", m_id, m_buffer_send_list->get_size());
+    // get a buffer off our queue
+    ink_assert(m_buffer_send_list != NULL);
+    ink_assert(m_buffer_in_iocore == NULL);
+    if ((m_buffer_in_iocore = m_buffer_send_list->get()) == NULL) {
+      return client_idle(LOG_COLL_EVENT_SWITCH, NULL);
+    }
+    Debug("log-coll", "[%d]client::client_send - send_list to m_buffer_in_iocore", m_id);
+    Debug("log-coll", "[%d]client::client_send - send_list_size(%d)", m_id, m_buffer_send_list->get_size());
 
-      // enable m_flow if we're out of work to do
-      if (m_flow == LOG_COLL_FLOW_DENY && m_buffer_send_list->get_size() == 0) {
-        Debug("log-coll", "[%d]client::client_send - m_flow = ALLOW", m_id);
-        Note("[log-coll] send-queue clear; resuming collation [%s:%u]",
-             m_log_host->ip_addr().toString(ipb, sizeof ipb), m_log_host->port());
-        m_flow = LOG_COLL_FLOW_ALLOW;
-      }
-      // future work:
-      // Wrap the buffer in a io_buffer_block and send directly to
-      // do_io_write to save a memory copy.  But for now, just
-      // write the lame way.
+    // enable m_flow if we're out of work to do
+    if (m_flow == LOG_COLL_FLOW_DENY && m_buffer_send_list->get_size() == 0) {
+      Debug("log-coll", "[%d]client::client_send - m_flow = ALLOW", m_id);
+      Note("[log-coll] send-queue clear; resuming collation [%s:%u]", m_log_host->ip_addr().toString(ipb, sizeof ipb),
+           m_log_host->port());
+      m_flow = LOG_COLL_FLOW_ALLOW;
+    }
+// future work:
+// Wrap the buffer in a io_buffer_block and send directly to
+// do_io_write to save a memory copy.  But for now, just
+// write the lame way.
 
 #if defined(LOG_BUFFER_TRACKING)
-      Debug("log-buftrak", "[%d]client::client_send - network write begin", m_buffer_in_iocore->header()->id);
+    Debug("log-buftrak", "[%d]client::client_send - network write begin", m_buffer_in_iocore->header()->id);
 #endif // defined(LOG_BUFFER_TRACKING)
 
-      // prepare to send data
-      ink_assert(m_buffer_in_iocore != NULL);
-      LogBufferHeader *log_buffer_header = m_buffer_in_iocore->header();
-      ink_assert(log_buffer_header != NULL);
-      NetMsgHeader nmh;
-      int bytes_to_send = log_buffer_header->byte_count;
-      nmh.msg_bytes = bytes_to_send;
-      // TODO: We currently don't try to make the log buffers handle little vs big endian. TS-1156.
-      //m_buffer_in_iocore->convert_to_network_order();
+    // prepare to send data
+    ink_assert(m_buffer_in_iocore != NULL);
+    LogBufferHeader *log_buffer_header = m_buffer_in_iocore->header();
+    ink_assert(log_buffer_header != NULL);
+    NetMsgHeader nmh;
+    int bytes_to_send = log_buffer_header->byte_count;
+    nmh.msg_bytes     = bytes_to_send;
+    // TODO: We currently don't try to make the log buffers handle little vs big endian. TS-1156.
+    // m_buffer_in_iocore->convert_to_network_order();
 
-      RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_num_sent_to_network_stat,
-                     log_buffer_header->entry_count);
+    RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_num_sent_to_network_stat, log_buffer_header->entry_count);
 
-      RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_bytes_sent_to_network_stat,
-                     log_buffer_header->byte_count);
+    RecIncrRawStat(log_rsb, mutex->thread_holding, log_stat_bytes_sent_to_network_stat, log_buffer_header->byte_count);
 
-      // copy into m_send_buffer
-      ink_assert(m_send_buffer != NULL);
-      m_send_buffer->write((char *) &nmh, sizeof(NetMsgHeader));
-      m_send_buffer->write((char *) log_buffer_header, bytes_to_send);
-      bytes_to_send += sizeof(NetMsgHeader);
+    // copy into m_send_buffer
+    ink_assert(m_send_buffer != NULL);
+    m_send_buffer->write((char *)&nmh, sizeof(NetMsgHeader));
+    m_send_buffer->write((char *)log_buffer_header, bytes_to_send);
+    bytes_to_send += sizeof(NetMsgHeader);
 
-      // send m_send_buffer to iocore
-      Debug("log-coll", "[%d]client::client_send - do_io_write(%d)", m_id, bytes_to_send);
-      ink_assert(m_host_vc != NULL);
-      m_host_vio = m_host_vc->do_io_write(this, bytes_to_send, m_send_reader);
-      ink_assert(m_host_vio != NULL);
-    }
+    // send m_send_buffer to iocore
+    Debug("log-coll", "[%d]client::client_send - do_io_write(%d)", m_id, bytes_to_send);
+    ink_assert(m_host_vc != NULL);
+    m_host_vio = m_host_vc->do_io_write(this, bytes_to_send, m_send_reader);
+    ink_assert(m_host_vio != NULL);
+  }
     return EVENT_CONT;
 
   case VC_EVENT_WRITE_READY:
@@ -679,24 +675,24 @@ LogCollationClientSM::client_send(int event, VIO * /* vio ATS_UNUSED */)
     // switch back to client_send
     return client_send(LOG_COLL_EVENT_SWITCH, NULL);
 
+  case VC_EVENT_ACTIVE_TIMEOUT:
+  case VC_EVENT_INACTIVITY_TIMEOUT:
   case VC_EVENT_EOS:
-  case VC_EVENT_ERROR:
-    {
-      Debug("log-coll", "[%d]client::client_send - EOS|ERROR", m_id);
-      int64_t read_avail = m_send_reader->read_avail();
+  case VC_EVENT_ERROR: {
+    Debug("log-coll", "[%d]client::client_send - TIMEOUT|EOS|ERROR", m_id);
+    int64_t read_avail = m_send_reader->read_avail();
 
-      if (read_avail > 0) {
-        Debug("log-coll", "[%d]client::client_send - consuming unsent data", m_id);
-        m_send_reader->consume(read_avail);
-      }
-
-      return client_fail(LOG_COLL_EVENT_SWITCH, NULL);
+    if (read_avail > 0) {
+      Debug("log-coll", "[%d]client::client_send - consuming unsent data", m_id);
+      m_send_reader->consume(read_avail);
     }
+
+    return client_fail(LOG_COLL_EVENT_SWITCH, NULL);
+  }
 
   default:
     Debug("log-coll", "[%d]client::client_send - default", m_id);
     return client_fail(LOG_COLL_EVENT_SWITCH, NULL);
-
   }
 }
 

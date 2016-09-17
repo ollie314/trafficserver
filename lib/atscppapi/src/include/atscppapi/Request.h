@@ -29,15 +29,16 @@
 #include <atscppapi/Url.h>
 #include <atscppapi/noncopyable.h>
 
-namespace atscppapi {
-
+namespace atscppapi
+{
 class Transaction;
 struct RequestState;
 
 /**
  * @brief Encapsulates a request.
  */
-class Request: noncopyable {
+class Request : noncopyable
+{
 public:
   Request();
 
@@ -59,14 +60,15 @@ public:
   Headers &getHeaders() const;
 
   ~Request();
+
 private:
   Request(void *hdr_buf, void *hdr_loc);
   RequestState *state_;
   void init(void *hdr_buf, void *hdr_loc);
+  void reset();
   friend class Transaction;
   friend class ClientRequest;
 };
-
 }
 
 #endif
