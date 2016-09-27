@@ -4994,6 +4994,15 @@ TSHttpTxnInfoIntGet(TSHttpTxn txnp, TSHttpTxnInfoKey key, TSMgmtInt *value)
   return TS_SUCCESS;
 }
 
+int
+TSHttpTxnIsWebsocket(TSHttpTxn txnp)
+{
+  sdk_assert(sdk_sanity_check_txn(txnp) == TS_SUCCESS);
+
+  HttpSM *sm = (HttpSM *)txnp;
+  return sm->t_state.is_websocket;
+}
+
 TSReturnCode
 TSHttpTxnCacheLookupUrlGet(TSHttpTxn txnp, TSMBuffer bufp, TSMLoc obj)
 {
@@ -5742,6 +5751,65 @@ TSHttpTxnParentProxySet(TSHttpTxn txnp, const char *hostname, int port)
   sm->t_state.api_info.parent_proxy_port = port;
 }
 
+TSReturnCode
+TSHttpTxnParentSelectionUrlGet(TSHttpTxn txnp, TSMBuffer bufp, TSMLoc obj)
+{
+  sdk_assert(sdk_sanity_check_txn(txnp) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_mbuffer(bufp) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_url_handle(obj) == TS_SUCCESS);
+
+  HttpSM *sm = (HttpSM *)txnp;
+  URL u, *l_url;
+
+  u.m_heap     = ((HdrHeapSDKHandle *)bufp)->m_heap;
+  u.m_url_impl = (URLImpl *)obj;
+  if (!u.valid())
+    return TS_ERROR;
+
+  l_url = sm->t_state.cache_info.parent_selection_url;
+  if (l_url && l_url->valid()) {
+    u.copy(l_url);
+    return TS_SUCCESS;
+  }
+
+  return TS_ERROR;
+}
+
+TSReturnCode
+TSHttpTxnParentSelectionUrlSet(TSHttpTxn txnp, TSMBuffer bufp, TSMLoc obj)
+{
+  sdk_assert(sdk_sanity_check_txn(txnp) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_mbuffer(bufp) == TS_SUCCESS);
+  sdk_assert(sdk_sanity_check_url_handle(obj) == TS_SUCCESS);
+
+  HttpSM *sm = (HttpSM *)txnp;
+  URL u, *l_url;
+
+  u.m_heap     = ((HdrHeapSDKHandle *)bufp)->m_heap;
+  u.m_url_impl = (URLImpl *)obj;
+  if (!u.valid()) {
+    return TS_ERROR;
+  }
+
+  l_url = sm->t_state.cache_info.parent_selection_url;
+  if (!l_url) {
+    sm->t_state.cache_info.parent_selection_url_storage.create(NULL);
+    sm->t_state.cache_info.parent_selection_url = &(sm->t_state.cache_info.parent_selection_url_storage);
+    l_url                                       = sm->t_state.cache_info.parent_selection_url;
+  }
+
+  if (!l_url || !l_url->valid()) {
+    return TS_ERROR;
+  } else {
+    l_url->copy(&u);
+  }
+
+  Debug("parent_select", "TSHttpTxnParentSelectionUrlSet() parent_selection_url : addr = %p val = %p",
+        &(sm->t_state.cache_info.parent_selection_url), sm->t_state.cache_info.parent_selection_url);
+
+  return TS_SUCCESS;
+}
+
 void
 TSHttpTxnUntransformedRespCache(TSHttpTxn txnp, int on)
 {
@@ -6425,6 +6493,7 @@ TSVConnFdCreate(int fd)
   vc->submit_time = Thread::get_hrtime();
   vc->set_is_transparent(false);
   vc->mutex = new_ProxyMutex();
+  vc->set_context(NET_VCONNECTION_OUT);
 
   if (vc->connectUp(this_ethread(), fd) != CONNECT_SUCCESS) {
     return NULL;

@@ -28,6 +28,7 @@
 #include "P_SSLUtils.h"
 #include "InkAPIInternal.h" // Added to include the ssl_hook definitions
 #include "P_SSLConfig.h"
+#include "BIO_fastopen.h"
 #include "Log.h"
 
 #include <climits>
@@ -142,8 +143,15 @@ make_ssl_connection(SSL_CTX *ctx, SSLNetVConnection *netvc)
     netvc->ssl = ssl;
 
     // Only set up the bio stuff for the server side
-    if (netvc->getSSLClientConnection()) {
-      SSL_set_fd(ssl, netvc->get_socket());
+    if (netvc->get_context() == NET_VCONNECTION_OUT) {
+      BIO *bio = BIO_new(const_cast<BIO_METHOD *>(BIO_s_fastopen()));
+      BIO_set_fd(bio, netvc->get_socket(), BIO_NOCLOSE);
+
+      if (netvc->options.f_tcp_fastopen) {
+        BIO_set_conn_address(bio, netvc->get_remote_addr());
+      }
+
+      SSL_set_bio(ssl, bio, bio);
     } else {
       netvc->initialize_handshake_buffers();
       BIO *rbio = BIO_new(BIO_s_mem());
@@ -152,7 +160,7 @@ make_ssl_connection(SSL_CTX *ctx, SSLNetVConnection *netvc)
       SSL_set_bio(ssl, rbio, wbio);
     }
 
-    SSL_set_app_data(ssl, netvc);
+    SSLNetVCAttach(ssl, netvc);
   }
 
   return ssl;
@@ -432,7 +440,7 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
   if (!getSSLHandShakeComplete()) {
     int err;
 
-    if (getSSLClientConnection()) {
+    if (get_context() == NET_VCONNECTION_OUT) {
       ret = sslStartHandShake(SSL_EVENT_CLIENT, err);
     } else {
       ret = sslStartHandShake(SSL_EVENT_SERVER, err);
@@ -786,7 +794,6 @@ SSLNetVConnection::SSLNetVConnection()
     sslTotalBytesSent(0),
     hookOpRequested(SSL_HOOK_OP_DEFAULT),
     sslHandShakeComplete(false),
-    sslClientConnection(false),
     sslClientRenegotiationAbort(false),
     sslSessionCacheHit(false),
     handShakeBuffer(NULL),
@@ -876,7 +883,6 @@ SSLNetVConnection::free(EThread *t)
   }
 
   sslHandShakeComplete        = false;
-  sslClientConnection         = false;
   sslHandshakeBeginTime       = 0;
   sslLastWriteTime            = 0;
   sslTotalBytesSent           = 0;
@@ -912,6 +918,7 @@ SSLNetVConnection::sslStartHandShake(int event, int &err)
     // net_activity will not be triggered until after the handshake
     set_inactivity_timeout(HRTIME_SECONDS(SSLConfigParams::ssl_handshake_timeout_in));
   }
+
   switch (event) {
   case SSL_EVENT_SERVER:
     if (this->ssl == NULL) {
@@ -968,11 +975,22 @@ SSLNetVConnection::sslStartHandShake(int event, int &err)
   case SSL_EVENT_CLIENT:
     if (this->ssl == NULL) {
       this->ssl = make_ssl_connection(ssl_NetProcessor.client_ctx, this);
-    }
 
-    if (this->ssl == NULL) {
-      SSLErrorVC(this, "failed to create SSL client session");
-      return EVENT_ERROR;
+      if (this->ssl == NULL) {
+        SSLErrorVC(this, "failed to create SSL client session");
+        return EVENT_ERROR;
+      }
+
+#if TS_USE_TLS_SNI
+      if (this->options.sni_servername) {
+        if (SSL_set_tlsext_host_name(this->ssl, this->options.sni_servername)) {
+          Debug("ssl", "using SNI name '%s' for client handshake", this->options.sni_servername.get());
+        } else {
+          Debug("ssl.error", "failed to set SNI name '%s' for client handshake", this->options.sni_servername.get());
+          SSL_INCREMENT_DYN_STAT(ssl_sni_name_set_failure);
+        }
+      }
+#endif
     }
 
     return sslClientHandShakeEvent(err);
@@ -996,6 +1014,7 @@ SSLNetVConnection::sslServerHandShakeEvent(int &err)
       // the previous hook yet.
       curHook = curHook->next();
     }
+
     if (SSL_HOOKS_INVOKE == sslPreAcceptHookState) {
       if (0 == curHook) { // no hooks left, we're done
         sslPreAcceptHookState = SSL_HOOKS_DONE;
@@ -1209,21 +1228,12 @@ SSLNetVConnection::sslServerHandShakeEvent(int &err)
 int
 SSLNetVConnection::sslClientHandShakeEvent(int &err)
 {
-#if TS_USE_TLS_SNI
-  if (options.sni_servername) {
-    if (SSL_set_tlsext_host_name(ssl, options.sni_servername)) {
-      Debug("ssl", "using SNI name '%s' for client handshake", options.sni_servername.get());
-    } else {
-      Debug("ssl.error", "failed to set SNI name '%s' for client handshake", options.sni_servername.get());
-      SSL_INCREMENT_DYN_STAT(ssl_sni_name_set_failure);
-    }
-  }
-#endif
+  bool trace = getSSLTrace();
+  ssl_error_t ssl_error;
 
-  SSL_set_ex_data(ssl, get_ssl_client_data_index(), this);
-  ssl_error_t ssl_error = SSLConnect(ssl);
-  bool trace            = getSSLTrace();
+  ink_assert(SSLNetVCAccess(ssl) == this);
 
+  ssl_error = SSLConnect(ssl);
   switch (ssl_error) {
   case SSL_ERROR_NONE:
     if (is_debug_tag_set("ssl")) {
@@ -1318,7 +1328,7 @@ SSLNetVConnection::registerNextProtocolSet(const SSLNextProtocolSet *s)
 int
 SSLNetVConnection::advertise_next_protocol(SSL *ssl, const unsigned char **out, unsigned int *outlen, void * /*arg ATS_UNUSED */)
 {
-  SSLNetVConnection *netvc = (SSLNetVConnection *)SSL_get_app_data(ssl);
+  SSLNetVConnection *netvc = SSLNetVCAccess(ssl);
 
   ink_release_assert(netvc != NULL);
 
@@ -1336,7 +1346,7 @@ int
 SSLNetVConnection::select_next_protocol(SSL *ssl, const unsigned char **out, unsigned char *outlen,
                                         const unsigned char *in ATS_UNUSED, unsigned inlen ATS_UNUSED, void *)
 {
-  SSLNetVConnection *netvc = (SSLNetVConnection *)SSL_get_app_data(ssl);
+  SSLNetVConnection *netvc = SSLNetVCAccess(ssl);
   const unsigned char *npn = NULL;
   unsigned npnsz           = 0;
 
@@ -1498,8 +1508,7 @@ SSLNetVConnection::populate(Connection &con, Continuation *c, void *arg)
   // Maybe bring over the stats?
 
   this->sslHandShakeComplete = true;
-  this->sslClientConnection  = true;
-  SSL_set_ex_data(this->ssl, get_ssl_client_data_index(), this);
+  SSLNetVCAttach(this->ssl, this);
   return EVENT_DONE;
 }
 

@@ -231,7 +231,7 @@ System Variables
 .. ts:cv:: CONFIG proxy.config.syslog_facility STRING LOG_DAEMON
 
    The facility used to record system log files. Refer to
-   :ref:`admin-monitoring-logging-understanding` for more in-depth discussion
+   :ref:`admin-logging-understanding` for more in-depth discussion
    of the contents and interpretations of log files.
 
 .. ts:cv:: CONFIG proxy.config.cop.core_signal INT 0
@@ -261,6 +261,22 @@ System Variables
    time to load potentially large configuration files such as remap config. Note that
    this applies only during startup of Traffic Server and does not apply to the run
    time heartbeat checking.
+
+.. ts:cv:: CONFIG proxy.config.cop.active_health_checks INT 3
+
+   Specifies which, if any, of :program:`traffic_server` and
+   :program:`traffic_manager` that :program:`traffic_cop` is allowed to kill
+   in the event of failed health checks. The possible values are:
+
+   ===== ======================================================================
+   Value Description
+   ===== ======================================================================
+   ``0`` :program:`traffic_cop` is not allowed to kill any processes.
+   ``1`` Only :program:`traffic_manager` can be killed on failed health checks.
+   ``2`` Only :program:`traffic_server` can be killed on failed health checks.
+   ``3`` :program:`traffic_server` and :program:`traffic_manager` can be killed
+         on failures (default).
+   ===== ======================================================================
 
 .. ts:cv:: CONFIG proxy.config.output.logfile  STRING traffic.out
 
@@ -2534,7 +2550,7 @@ Logging Configuration
    ``3``    Dull logging (errors and transactions).
    ======== ===================================================================
 
-   Refer to :ref:`admin-monitoring-logging` for more information on event logging.
+   Refer to :ref:`admin-logging` for more information on event logging.
 
 .. ts:cv:: CONFIG proxy.config.log.max_secs_per_buffer INT 5
    :reloadable:
@@ -2633,7 +2649,8 @@ Logging Configuration
    ===== ======================================================================
 
    For information on sending custom formats to the collation server,
-   refer to :ref:`admin-monitoring-logging-formats` and :file:`logging.config`.
+   refer to :ref:`admin-logging-collating-custom-formats` and
+   :file:`logging.config`.
 
 .. note::
 
@@ -3388,12 +3405,18 @@ Sockets
         TCP_NODELAY  (1)
         SO_KEEPALIVE (2)
         SO_LINGER (4) - with a timeout of 0 seconds
+        TCP_FASTOPEN (8)
 
 .. note::
 
    This is a bitmask and you need to decide what bits to set.  Therefore,
    you must set the value to ``3`` if you want to enable nodelay and
    keepalive options above.
+
+.. note::
+
+   To allow TCP Fast Open for client sockets on Linux, bit 2 of
+   the ``net.ipv4.tcp_fastopen`` sysctl must be set.
 
 .. ts:cv:: CONFIG proxy.config.net.sock_send_buffer_size_out INT 0
    :overridable:
@@ -3414,6 +3437,7 @@ Sockets
         TCP_NODELAY  (1)
         SO_KEEPALIVE (2)
         SO_LINGER (4) - with a timeout of 0 seconds
+        TCP_FASTOPEN (8)
 
 .. note::
 
@@ -3425,6 +3449,11 @@ Sockets
    to 0. This is useful when Traffic Server and the origin server
    are co-located and large numbers of sockets are retained
    in the TIME_WAIT state.
+
+.. note::
+
+   To allow TCP Fast Open for server sockets on Linux, bit 1 of
+   the ``net.ipv4.tcp_fastopen`` sysctl must be set.
 
 .. ts:cv:: CONFIG proxy.config.net.sock_mss_in INT 0
 

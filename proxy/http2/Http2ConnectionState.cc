@@ -922,7 +922,9 @@ Http2ConnectionState::create_stream(Http2StreamId new_id)
   ++total_client_streams_count;
 
   new_stream->set_parent(ua_session);
-  new_stream->mutex = ua_session->mutex;
+  new_stream->mutex                     = ua_session->mutex;
+  new_stream->is_first_transaction_flag = get_stream_requests() == 0;
+  increment_stream_requests();
   ua_session->get_netvc()->add_to_active_queue();
   // reset the activity timeout everytime a new stream is created
   ua_session->get_netvc()->set_active_timeout(HRTIME_SECONDS(Http2::active_timeout_in));
@@ -1015,6 +1017,12 @@ Http2ConnectionState::release_stream(Http2Stream *stream)
   if (stream) {
     --total_client_streams_count;
   }
+
+  // If the number of clients is 0, then mark the connection as inactive
+  if (total_client_streams_count == 0 && ua_session) {
+    ua_session->clear_session_active();
+  }
+
   if (ua_session && fini_received && total_client_streams_count == 0) {
     // We were shutting down, go ahead and terminate the session
     ua_session->destroy();
