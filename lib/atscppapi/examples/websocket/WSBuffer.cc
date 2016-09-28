@@ -49,7 +49,7 @@
 
 static const std::string magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-WSBuffer::WSBuffer()
+WSBuffer::WSBuffer() : frame_(0)
 {
 }
 
@@ -181,7 +181,9 @@ WSBuffer::ws_digest(std::string const &key)
   char digest_buf[WS_DIGEST_MAX];
   size_t digest_len = 0;
 
-  TSBase64Encode((char *)hash_buf, hash_len, digest_buf, WS_DIGEST_MAX, &digest_len);
+  if (TSBase64Encode((char *)hash_buf, hash_len, digest_buf, WS_DIGEST_MAX, &digest_len) != TS_SUCCESS) {
+    return "base64encode-failed";
+  }
 
   return std::string((char *)digest_buf, digest_len);
 }
