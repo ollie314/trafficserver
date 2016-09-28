@@ -27,11 +27,9 @@ Synopsis
 
 `#include <ts/ts.h>`
 
-.. function:: TSReturnCode TSHttpTxnClientProtocolStackGet(TSHttpTxn txnp, int n, char const** 
-result, int* actual)
+.. function:: TSReturnCode TSHttpTxnClientProtocolStackGet(TSHttpTxn txnp, int n, char const** result, int* actual)
 
-.. function:: TSReturnCode TSHttpSsnClientProtocolStackGet(TSHttpSsn ssnp, int n, char const** 
-result, int* actual)
+.. function:: TSReturnCode TSHttpSsnClientProtocolStackGet(TSHttpSsn ssnp, int n, char const** result, int* actual)
 
 .. function:: char const* TSHttpTxnClientProtocolStackContains(TSHttpTxn txnp)
 
@@ -106,7 +104,7 @@ The example below is excerpted from `example/protocol-stack/protocol-stack.cc`
 in the Traffic Server source distribution. It demonstrates how to
 use :func:`TSHttpTxnClientProtocolStackGet` and :func:`TSHttpTxnClientProtocolStackContains`
 
-.. literalinclude:: ../../../example/protocol-stack/protocol-stack.cc
+.. literalinclude:: ../../../../example/protocol-stack/protocol-stack.cc
   :language: c
   :lines: 31-46
 

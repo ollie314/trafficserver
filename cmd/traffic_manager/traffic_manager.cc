@@ -81,7 +81,7 @@ static AppVersionInfo appVersionInfo; // Build info for this application
 static inkcoreapi DiagsConfig *diagsConfig;
 static char debug_tags[1024]  = "";
 static char action_tags[1024] = "";
-static bool proxy_off         = false;
+static int proxy_off          = false;
 static char bind_stdout[512]  = "";
 static char bind_stderr[512]  = "";
 
@@ -436,7 +436,7 @@ main(int argc, const char **argv)
   char *proxy_port   = 0;
   int proxy_backdoor = -1;
   char *group_addr = NULL, *tsArgs = NULL;
-  bool disable_syslog = false;
+  int disable_syslog = false;
   char userToRunAs[MAX_LOGIN + 1];
   RecInt fds_throttle = -1;
   time_t ticker;
@@ -496,11 +496,10 @@ main(int argc, const char **argv)
 
   // Bootstrap the Diags facility so that we can use it while starting
   //  up the manager
-  diagsConfig = new DiagsConfig(DIAGS_LOG_FILENAME, debug_tags, action_tags, false);
+  diagsConfig = new DiagsConfig("Manager", DIAGS_LOG_FILENAME, debug_tags, action_tags, false);
   diags       = diagsConfig->diags;
   diags->set_stdout_output(bind_stdout);
   diags->set_stderr_output(bind_stderr);
-  diags->prefix_str = "Manager ";
 
   RecLocalInit();
   LibRecordsConfigInit();
@@ -542,10 +541,9 @@ main(int argc, const char **argv)
   }
   // INKqa11968: need to set up callbacks and diags data structures
   // using configuration in records.config
-  diagsConfig = new DiagsConfig(DIAGS_LOG_FILENAME, debug_tags, action_tags, true);
+  diagsConfig = new DiagsConfig("Manager", DIAGS_LOG_FILENAME, debug_tags, action_tags, true);
   diags       = diagsConfig->diags;
   RecSetDiags(diags);
-  diags->prefix_str = "Manager ";
   diags->set_stdout_output(bind_stdout);
   diags->set_stderr_output(bind_stderr);
 
