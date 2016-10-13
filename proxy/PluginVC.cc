@@ -1001,10 +1001,11 @@ PluginVCCore::~PluginVCCore()
 }
 
 PluginVCCore *
-PluginVCCore::alloc()
+PluginVCCore::alloc(Continuation *acceptor)
 {
   PluginVCCore *pvc = new PluginVCCore;
   pvc->init();
+  pvc->connect_to = acceptor;
   return pvc;
 }
 
@@ -1065,20 +1066,10 @@ PluginVCCore::destroy()
   delete this;
 }
 
-void
-PluginVCCore::set_accept_cont(Continuation *c)
-{
-  connect_to = c;
-  // FIX ME - must return action
-}
-
 PluginVC *
 PluginVCCore::connect()
 {
-  // Make sure there is another end to connect to
-  if (connect_to == NULL) {
-    return NULL;
-  }
+  ink_release_assert(connect_to != NULL);
 
   connected = true;
   state_send_accept(EVENT_IMMEDIATE, NULL);
@@ -1089,10 +1080,7 @@ PluginVCCore::connect()
 Action *
 PluginVCCore::connect_re(Continuation *c)
 {
-  // Make sure there is another end to connect to
-  if (connect_to == NULL) {
-    return NULL;
-  }
+  ink_release_assert(connect_to != NULL);
 
   EThread *my_thread = this_ethread();
   MUTEX_TAKE_LOCK(this->mutex, my_thread);
@@ -1114,14 +1102,19 @@ PluginVCCore::connect_re(Continuation *c)
 int
 PluginVCCore::state_send_accept_failed(int /* event ATS_UNUSED */, void * /* data ATS_UNUSED */)
 {
-  MUTEX_TRY_LOCK(lock, connect_to->mutex, this_ethread());
-
-  if (lock.is_locked()) {
+  if (connect_to->mutex == NULL) {
     connect_to->handleEvent(NET_EVENT_ACCEPT_FAILED, NULL);
     destroy();
   } else {
-    SET_HANDLER(&PluginVCCore::state_send_accept_failed);
-    eventProcessor.schedule_in(this, PVC_LOCK_RETRY_TIME);
+    MUTEX_TRY_LOCK(lock, connect_to->mutex, this_ethread());
+
+    if (lock.is_locked()) {
+      connect_to->handleEvent(NET_EVENT_ACCEPT_FAILED, NULL);
+      destroy();
+    } else {
+      SET_HANDLER(&PluginVCCore::state_send_accept_failed);
+      eventProcessor.schedule_in(this, PVC_LOCK_RETRY_TIME);
+    }
   }
 
   return 0;
@@ -1130,13 +1123,17 @@ PluginVCCore::state_send_accept_failed(int /* event ATS_UNUSED */, void * /* dat
 int
 PluginVCCore::state_send_accept(int /* event ATS_UNUSED */, void * /* data ATS_UNUSED */)
 {
-  MUTEX_TRY_LOCK(lock, connect_to->mutex, this_ethread());
-
-  if (lock.is_locked()) {
+  if (connect_to->mutex == NULL) {
     connect_to->handleEvent(NET_EVENT_ACCEPT, &passive_vc);
   } else {
-    SET_HANDLER(&PluginVCCore::state_send_accept);
-    eventProcessor.schedule_in(this, PVC_LOCK_RETRY_TIME);
+    MUTEX_TRY_LOCK(lock, connect_to->mutex, this_ethread());
+
+    if (lock.is_locked()) {
+      connect_to->handleEvent(NET_EVENT_ACCEPT, &passive_vc);
+    } else {
+      SET_HANDLER(&PluginVCCore::state_send_accept);
+      eventProcessor.schedule_in(this, PVC_LOCK_RETRY_TIME);
+    }
   }
 
   return 0;
@@ -1294,8 +1291,7 @@ PVCTestDriver::run_next_test()
 
   NetVCTest *p       = new NetVCTest;
   NetVCTest *a       = new NetVCTest;
-  PluginVCCore *core = PluginVCCore::alloc();
-  core->set_accept_cont(p);
+  PluginVCCore *core = PluginVCCore::alloc(p);
 
   p->init_test(NET_VC_TEST_PASSIVE, this, NULL, r, &netvc_tests_def[p_index], "PluginVC", "pvc_test_detail");
   PluginVC *a_vc = core->connect();

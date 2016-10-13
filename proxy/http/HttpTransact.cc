@@ -647,94 +647,6 @@ HttpTransact::HandleBlindTunnel(State *s)
   HandleRequest(s);
 }
 
-bool
-HttpTransact::perform_accept_encoding_filtering(State *s)
-{
-  HttpUserAgent_RegxEntry *uae;
-  HTTPHdr *client_request;
-  MIMEField *accept_field;
-  MIMEField *usragent_field;
-  char tmp_ua_buf[1024], *c;
-  char const *u_agent = NULL;
-  int u_agent_len     = 0;
-  bool retcode        = false;
-  bool ua_match       = false;
-
-  client_request = &s->hdr_info.client_request;
-
-  // Make sense to check Accept-Encoding if UserAgent is present (and matches)
-  if ((usragent_field = client_request->field_find(MIME_FIELD_USER_AGENT, MIME_LEN_USER_AGENT)) != 0 &&
-      (u_agent = usragent_field->value_get(&u_agent_len)) != 0 && u_agent_len > 0) {
-    if (u_agent_len >= (int)sizeof(tmp_ua_buf)) {
-      u_agent_len = (int)(sizeof(tmp_ua_buf) - 1);
-    }
-    memcpy(tmp_ua_buf, u_agent, u_agent_len);
-    tmp_ua_buf[u_agent_len] = '\0';
-
-    // TODO: Do we really want to do these hardcoded checks still?
-    // Check hardcoded case MSIE>6 & Mozilla>4
-    if ((c = strstr(tmp_ua_buf, "MSIE")) != NULL) {
-      if (c[5] >= '7' && c[5] <= '9') {
-        return false; // Don't change anything for IE > 6
-      }
-      ua_match = true;
-    } else if (!strncasecmp(tmp_ua_buf, "mozilla", 7)) {
-      if (tmp_ua_buf[8] >= '5' && tmp_ua_buf[8] <= '9') {
-        return false; // Don't change anything for Mozilla > 4
-      }
-      ua_match = true;
-    }
-
-    // Check custom filters
-    if (!ua_match && HttpConfig::user_agent_list) {
-      for (uae = HttpConfig::user_agent_list; uae && !ua_match; uae = uae->next) {
-        switch (uae->stype) {
-        case HttpUserAgent_RegxEntry::STRTYPE_SUBSTR_CASE: /* .substring, .string */
-          if (u_agent_len >= uae->user_agent_str_size && !memcmp(tmp_ua_buf, uae->user_agent_str, uae->user_agent_str_size)) {
-            ua_match = true;
-          }
-          break;
-        case HttpUserAgent_RegxEntry::STRTYPE_SUBSTR_NCASE: /* .substring_ncase, .string_ncase */
-          if (u_agent_len >= uae->user_agent_str_size && !strncasecmp(uae->user_agent_str, tmp_ua_buf, uae->user_agent_str_size)) {
-            ua_match = true;
-          }
-          break;
-        case HttpUserAgent_RegxEntry::STRTYPE_REGEXP: /* .regexp POSIX regular expression */
-          if (uae->regx_valid && !pcre_exec(uae->regx, NULL, tmp_ua_buf, u_agent_len, 0, 0, NULL, 0)) {
-            ua_match = true;
-          }
-          break;
-        default: /* unknown type in the structure - bad initialization - impossible bug! */
-          /* I can use ink_error() here since we should shutdown TS immediately */
-          ink_error("[HttpTransact::perform_accept_encoding_filtering] - get unknown User-Agent string type - bad initialization");
-        };
-      }
-    }
-
-    /* If we have correct User-Agent header ....
-       Just set Accept-Encoding: identity or .... do nothing because
-       "If no Accept-Encoding field is present in a request, the server MAY assume that the client
-       will accept any content coding. In this case, if "identity" is one of the available content-codings,
-       then the server SHOULD use the "identity" content-coding, unless it has additional information that
-       a different content-coding is meaningful to the client." */
-    if (ua_match) {
-      DebugTxn("http_trans", "HttpTransact::ModifyRequest, insert identity Accept-Encoding");
-      accept_field = client_request->field_find(MIME_FIELD_ACCEPT_ENCODING, MIME_LEN_ACCEPT_ENCODING);
-      if (!accept_field) {
-        accept_field = client_request->field_create(MIME_FIELD_ACCEPT_ENCODING, MIME_LEN_ACCEPT_ENCODING);
-        if (accept_field) {
-          client_request->field_attach(accept_field);
-        }
-      }
-      if (accept_field) {
-        client_request->field_value_set(accept_field, HTTP_VALUE_IDENTITY, HTTP_LEN_IDENTITY);
-      }
-    }
-    retcode = true;
-  } // end of 'user-agent'
-  return retcode;
-}
-
 void
 HttpTransact::StartRemapRequest(State *s)
 {
@@ -1212,16 +1124,9 @@ HttpTransact::ModifyRequest(State *s)
     }
   }
 
-  /////////////////////////////////////////////////////////
-  // Modify Accept-Encoding for several specific User-Agent
-  /////////////////////////////////////////////////////////
-  if (s->txn_conf->accept_encoding_filter_enabled) {
-    perform_accept_encoding_filtering(s);
-  }
-
   DebugTxn("http_trans", "END HttpTransact::ModifyRequest");
-
   DebugTxn("http_trans", "Checking if transaction wants to upgrade");
+
   if (handle_upgrade_request(s)) {
     // everything should be handled by the upgrade handler.
     DebugTxn("http_trans", "Transaction will be upgraded by the appropriate upgrade handler.");
@@ -7446,7 +7351,7 @@ HttpTransact::what_is_document_freshness(State *s, HTTPHdr *client_request, HTTP
 
   // Fuzz the freshness to prevent too many revalidates to popular
   //  documents at the same time
-  if (s->txn_conf->freshness_fuzz_time >= 0) {
+  if ((s->txn_conf->freshness_fuzz_time > 0) && (s->txn_conf->freshness_fuzz_prob > 0.0)) {
     fresh_limit = fresh_limit - calculate_freshness_fuzz(s, fresh_limit);
     fresh_limit = max(0, fresh_limit);
     fresh_limit = min((int)s->txn_conf->cache_guaranteed_max_lifetime, fresh_limit);
@@ -8231,34 +8136,7 @@ HttpTransact::build_error_response(State *s, HTTPStatus status_code, const char 
       }
     }
   }
-  if (status_code == HTTP_STATUS_PROXY_AUTHENTICATION_REQUIRED && s->method == HTTP_WKSIDX_CONNECT &&
-      s->hdr_info.client_response.presence(MIME_PRESENCE_PROXY_CONNECTION)) {
-    int has_ua_msie = 0;
-    int user_agent_value_len, slen;
-    const char *user_agent_value, *c, *e;
 
-    user_agent_value = s->hdr_info.client_request.value_get(MIME_FIELD_USER_AGENT, MIME_LEN_USER_AGENT, &user_agent_value_len);
-    if (user_agent_value && user_agent_value_len >= 4) {
-      c = user_agent_value;
-      e = c + user_agent_value_len - 4;
-      while (1) {
-        slen = (int)(e - c);
-        c    = (const char *)memchr(c, 'M', slen);
-        if (c == NULL || (e - c) < 3) {
-          break;
-        }
-        if ((c[1] == 'S') && (c[2] == 'I') && (c[3] == 'E')) {
-          has_ua_msie = 1;
-          break;
-        }
-        c++;
-      }
-    }
-
-    if (has_ua_msie) {
-      s->hdr_info.client_response.value_set(MIME_FIELD_PROXY_CONNECTION, MIME_LEN_PROXY_CONNECTION, "close", 5);
-    }
-  }
   // Add a bunch of headers to make sure that caches between
   // the Traffic Server and the client do not cache the error
   // page.
@@ -8291,6 +8169,10 @@ HttpTransact::build_error_response(State *s, HTTPStatus status_code, const char 
   // After the body factory is called, a new "body" is allocated, and we must replace it. It is
   // unfortunate that there's no way to avoid this fabrication even when there is no substitutions...
   s->free_internal_msg_buffer();
+  if (len == 0) {
+    // If the file is empty, we may have a malloc(1) buffer. Release it.
+    new_msg = (char *)ats_free_null(new_msg);
+  }
   s->internal_msg_buffer                     = new_msg;
   s->internal_msg_buffer_size                = len;
   s->internal_msg_buffer_fast_allocator_size = -1;

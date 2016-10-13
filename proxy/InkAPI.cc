@@ -664,12 +664,6 @@ sdk_sanity_check_null_ptr(void *ptr)
   return TS_SUCCESS;
 }
 
-static TSReturnCode
-sdk_sanity_check_mutex(Ptr<ProxyMutex> &m)
-{
-  return m ? TS_SUCCESS : TS_ERROR;
-}
-
 // Plugin metric IDs index the plugin RSB, so bounds check against that.
 static TSReturnCode
 sdk_sanity_check_stat_id(int id)
@@ -6345,12 +6339,11 @@ TSHttpConnectWithPluginId(sockaddr const *addr, char const *tag, int64_t id)
   sdk_assert(ats_ip_port_cast(addr));
 
   if (plugin_http_accept) {
-    PluginVCCore *new_pvc = PluginVCCore::alloc();
+    PluginVCCore *new_pvc = PluginVCCore::alloc(plugin_http_accept);
 
     new_pvc->set_active_addr(addr);
     new_pvc->set_plugin_id(id);
     new_pvc->set_plugin_tag(tag);
-    new_pvc->set_accept_cont(plugin_http_accept);
 
     PluginVC *return_vc = new_pvc->connect();
 
@@ -6385,14 +6378,13 @@ TSHttpConnectTransparent(sockaddr const *client_addr, sockaddr const *server_add
   sdk_assert(ats_ip_port_cast(server_addr));
 
   if (plugin_http_transparent_accept) {
-    PluginVCCore *new_pvc = PluginVCCore::alloc();
+    PluginVCCore *new_pvc = PluginVCCore::alloc(plugin_http_transparent_accept);
 
     // set active address expects host ordering and the above casts do not
     // swap when it is required
     new_pvc->set_active_addr(client_addr);
     new_pvc->set_passive_addr(server_addr);
     new_pvc->set_transparent(true, true);
-    new_pvc->set_accept_cont(plugin_http_transparent_accept);
 
     PluginVC *return_vc = new_pvc->connect();
 
@@ -6653,35 +6645,25 @@ TSTransformOutputVConnGet(TSVConn connp)
 void
 TSHttpTxnServerIntercept(TSCont contp, TSHttpTxn txnp)
 {
+  HttpSM *http_sm = (HttpSM *)txnp;
+
   sdk_assert(sdk_sanity_check_txn(txnp) == TS_SUCCESS);
   sdk_assert(sdk_sanity_check_continuation(contp) == TS_SUCCESS);
 
-  HttpSM *http_sm    = (HttpSM *)txnp;
-  INKContInternal *i = (INKContInternal *)contp;
-
-  // Must have a mutex
-  sdk_assert(sdk_sanity_check_mutex(i->mutex) == TS_SUCCESS);
-
   http_sm->plugin_tunnel_type = HTTP_PLUGIN_AS_SERVER;
-  http_sm->plugin_tunnel      = PluginVCCore::alloc();
-  http_sm->plugin_tunnel->set_accept_cont(i);
+  http_sm->plugin_tunnel      = PluginVCCore::alloc((INKContInternal *)contp);
 }
 
 void
 TSHttpTxnIntercept(TSCont contp, TSHttpTxn txnp)
 {
+  HttpSM *http_sm = (HttpSM *)txnp;
+
   sdk_assert(sdk_sanity_check_txn(txnp) == TS_SUCCESS);
   sdk_assert(sdk_sanity_check_continuation(contp) == TS_SUCCESS);
 
-  HttpSM *http_sm    = (HttpSM *)txnp;
-  INKContInternal *i = (INKContInternal *)contp;
-
-  // Must have a mutex
-  sdk_assert(sdk_sanity_check_mutex(i->mutex) == TS_SUCCESS);
-
   http_sm->plugin_tunnel_type = HTTP_PLUGIN_AS_INTERCEPT;
-  http_sm->plugin_tunnel      = PluginVCCore::alloc();
-  http_sm->plugin_tunnel->set_accept_cont(i);
+  http_sm->plugin_tunnel      = PluginVCCore::alloc((INKContInternal *)contp);
 }
 
 // The API below require timer values as TSHRTime parameters
@@ -8052,9 +8034,6 @@ _conf_to_memberp(TSOverridableConfigKey conf, OverridableHttpConfigParams *overr
     typ = OVERRIDABLE_TYPE_INT;
     ret = &overridableHttpConfig->negative_revalidating_lifetime;
     break;
-  case TS_CONFIG_HTTP_ACCEPT_ENCODING_FILTER_ENABLED:
-    ret = &overridableHttpConfig->accept_encoding_filter_enabled;
-    break;
   case TS_CONFIG_SSL_HSTS_MAX_AGE:
     typ = OVERRIDABLE_TYPE_INT;
     ret = &overridableHttpConfig->proxy_response_hsts_max_age;
@@ -8767,11 +8746,6 @@ TSHttpTxnConfigFind(const char *name, int length, TSOverridableConfigKey *conf, 
 
   case 48:
     switch (name[length - 1]) {
-    case 'd':
-      if (!strncmp(name, "proxy.config.http.accept_encoding_filter_enabled", length)) {
-        cnf = TS_CONFIG_HTTP_ACCEPT_ENCODING_FILTER_ENABLED;
-      }
-      break;
     case 'e':
       if (!strncmp(name, "proxy.config.http.cache.ignore_client_cc_max_age", length)) {
         cnf = TS_CONFIG_HTTP_CACHE_IGNORE_CLIENT_CC_MAX_AGE;
@@ -8968,7 +8942,7 @@ TSPortDescriptorAccept(TSPortDescriptor descp, TSCont contp)
 {
   Action *action      = NULL;
   HttpProxyPort *port = (HttpProxyPort *)descp;
-  NetProcessor::AcceptOptions net(make_net_accept_options(port, 0 /* nthreads */));
+  NetProcessor::AcceptOptions net(make_net_accept_options(port, -1 /* nthreads */));
 
   if (port->isSSL()) {
     action = sslNetProcessor.main_accept((INKContInternal *)contp, port->m_fd, net);
@@ -8988,7 +8962,7 @@ TSPluginDescriptorAccept(TSCont contp)
   for (int i = 0, n = proxy_ports.length(); i < n; ++i) {
     HttpProxyPort &port = proxy_ports[i];
     if (port.isPlugin()) {
-      NetProcessor::AcceptOptions net(make_net_accept_options(&port, 0 /* nthreads */));
+      NetProcessor::AcceptOptions net(make_net_accept_options(&port, -1 /* nthreads */));
       action = netProcessor.main_accept((INKContInternal *)contp, port.m_fd, net);
     }
   }
