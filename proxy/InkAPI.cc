@@ -1805,7 +1805,7 @@ TSPluginDirGet(void)
 ////////////////////////////////////////////////////////////////////
 
 TSReturnCode
-TSPluginRegister(TSPluginRegistrationInfo *plugin_info)
+TSPluginRegister(const TSPluginRegistrationInfo *plugin_info)
 {
   sdk_assert(sdk_sanity_check_null_ptr((void *)plugin_info) == TS_SUCCESS);
 
@@ -5440,7 +5440,6 @@ TSHttpSsnIncomingAddrGet(TSHttpSsn ssnp)
   if (vc == NULL) {
     return 0;
   }
-
   return vc->get_local_addr();
 }
 sockaddr const *
