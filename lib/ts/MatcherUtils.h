@@ -44,16 +44,16 @@ int unescapifyStr(char *buffer);
     @a min and @a max should be at least the size of @c sockaddr_in6 to hold
     an IP address.
 */
-char const *ExtractIpRange(char *match_str, sockaddr *min, sockaddr *max);
+const char *ExtractIpRange(char *match_str, sockaddr *min, sockaddr *max);
 
 /// Convenience overload for IPv4.
-char const *ExtractIpRange(char *match_str,
+const char *ExtractIpRange(char *match_str,
                            in_addr_t *addr1, ///< [in,out] Returned address in host order.
                            in_addr_t *addr2  ///< [in,out] Returned address in host order.
                            );
 
 /// Convenience overload for IPv6.
-inline char const *
+inline const char *
 ExtractIpRange(char *match_str,
                sockaddr_in6 *addr1, ///< [in,out] Returned address in network order.
                sockaddr_in6 *addr2  ///< [in,out] Returned address in network order.
@@ -102,8 +102,8 @@ struct matcher_tags {
   bool
   empty() const
   {
-    return this->match_host == NULL && this->match_domain == NULL && this->match_ip == NULL && this->match_regex == NULL &&
-           this->match_url == NULL && this->match_host_regex == NULL;
+    return this->match_host == nullptr && this->match_domain == NULL && this->match_ip == NULL && this->match_regex == NULL &&
+           this->match_url == nullptr && this->match_host_regex == NULL;
   }
 };
 
@@ -136,7 +136,7 @@ struct config_parse_error {
     if (rhs.msg.get()) {
       this->msg = ats_strdup(rhs.msg.get());
     } else {
-      this->msg = (char *)NULL;
+      this->msg = (char *)nullptr;
     }
 
     return *this;
@@ -149,7 +149,7 @@ struct config_parse_error {
   }
 
   // A config error object evaluates to true if there is an error message.
-  operator bool() const { return msg.get() != NULL; }
+  operator bool() const { return msg.get() != nullptr; }
 private:
   config_parse_error() {}
   ats_scoped_str msg;

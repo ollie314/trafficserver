@@ -33,6 +33,12 @@
 #elif defined(__APPLE__)
 #include <libkern/OSByteOrder.h>
 #define be64toh(x) OSSwapBigToHostInt64(x)
+#elif defined(sun) || defined(__sun)
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define be64toh(x) ntohll(x)
+#elif BYTE_ORDER == BIG_ENDIAN
+#define be64toh(x) (x)
+#endif
 #elif defined(__OpenBSD__) || defined(__NetBSD__) || defined(__FreeBSD__)
 #include <sys/endian.h>
 #elif defined(__DragonFly__)
@@ -154,7 +160,7 @@ WSBuffer::ws_digest(std::string const &key)
   EVP_MD_CTX digest;
   EVP_MD_CTX_init(&digest);
 
-  if (!EVP_DigestInit_ex(&digest, EVP_sha1(), NULL)) {
+  if (!EVP_DigestInit_ex(&digest, EVP_sha1(), nullptr)) {
     EVP_MD_CTX_cleanup(&digest);
     return "init-failed";
   }

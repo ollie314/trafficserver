@@ -66,7 +66,7 @@ NetVCOptions::reset()
 
   etype = ET_NET;
 
-  sni_servername = NULL;
+  sni_servername = nullptr;
 }
 
 TS_INLINE void
@@ -172,7 +172,7 @@ public:
   UnixNetVConnection();
 
   int
-  populate_protocol(char const **results, int n) const
+  populate_protocol(const char **results, int n) const
   {
     int retval = 0;
     if (n > 0) {
@@ -187,7 +187,7 @@ public:
   const char *
   protocol_contains(const char *tag) const
   {
-    const char *retval   = NULL;
+    const char *retval   = nullptr;
     unsigned int tag_len = strlen(tag);
     const char *test_tag = options.get_proto_string();
     if (strncmp(tag, test_tag, tag_len) == 0) {
@@ -234,6 +234,7 @@ public:
   virtual int64_t load_buffer_and_write(int64_t towrite, MIOBufferAccessor &buf, int64_t &total_written, int &needs);
   void readDisable(NetHandler *nh);
   void readSignalError(NetHandler *nh, int err);
+  void writeSignalError(NetHandler *nh, int err);
   int readSignalDone(int event, NetHandler *nh);
   int readSignalAndUpdate(int event);
   void readReschedule(NetHandler *nh);
@@ -404,7 +405,7 @@ UnixNetVConnection::cancel_inactivity_timeout()
   if (inactivity_timeout) {
     Debug("socket", "Cancel inactive timeout for NetVC=%p", this);
     inactivity_timeout->cancel_action(this);
-    inactivity_timeout = NULL;
+    inactivity_timeout = nullptr;
   }
 #else
   set_inactivity_timeout(0);
@@ -420,7 +421,7 @@ UnixNetVConnection::cancel_active_timeout()
   if (active_timeout) {
     Debug("socket", "Cancel active timeout for NetVC=%p", this);
     active_timeout->cancel_action(this);
-    active_timeout = NULL;
+    active_timeout = nullptr;
   }
 #else
   next_activity_timeout_at = 0;

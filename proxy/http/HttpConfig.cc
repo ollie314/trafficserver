@@ -66,7 +66,7 @@ public:
 /// Data item for enumerated type config value.
 template <typename T> struct ConfigEnumPair {
   T _value;
-  char const *_key;
+  const char *_key;
 };
 
 /// Convert a string to an enumeration value.
@@ -75,7 +75,7 @@ template <typename T> struct ConfigEnumPair {
 /// If found @a value is set to the corresponding value in @a list.
 template <typename T, unsigned N>
 static bool
-http_config_enum_search(char const *key, const ConfigEnumPair<T> (&list)[N], MgmtByte &value)
+http_config_enum_search(const char *key, const ConfigEnumPair<T> (&list)[N], MgmtByte &value)
 {
   // We don't expect any of these lists to be more than 10 long, so a linear search is the best choice.
   for (unsigned i = 0; i < N; ++i) {
@@ -93,7 +93,7 @@ http_config_enum_search(char const *key, const ConfigEnumPair<T> (&list)[N], Mgm
 /// If found @a value is set to the corresponding value in @a list.
 template <typename T, unsigned N>
 static bool
-http_config_enum_read(char const *name, const ConfigEnumPair<T> (&list)[N], MgmtByte &value)
+http_config_enum_read(const char *name, const ConfigEnumPair<T> (&list)[N], MgmtByte &value)
 {
   char key[512]; // it's just one key - painful UI if keys are longer than this
   if (REC_ERR_OKAY == RecGetRecordString(name, key, sizeof(key))) {
@@ -122,7 +122,7 @@ int HttpConfig::m_id = 0;
 HttpConfigParams HttpConfig::m_master;
 
 static volatile int http_config_changes = 1;
-static HttpConfigCont *http_config_cont = NULL;
+static HttpConfigCont *http_config_cont = nullptr;
 
 HttpConfigCont::HttpConfigCont() : Continuation(new_ProxyMutex())
 {
@@ -154,7 +154,7 @@ http_config_cb(const char * /* name ATS_UNUSED */, RecDataT /* data_type ATS_UNU
 // Oh, how I long for when we can use C++eleventy lambdas without compiler problems!
 // I think for 5.0 when the BC stuff is yanked, we should probably revert this to independent callbacks.
 static int
-http_server_session_sharing_cb(char const *name, RecDataT dtype, RecData data, void *cookie)
+http_server_session_sharing_cb(const char *name, RecDataT dtype, RecData data, void *cookie)
 {
   bool valid_p        = true;
   HttpConfigParams *c = static_cast<HttpConfigParams *>(cookie);
@@ -871,7 +871,7 @@ HttpConfig::startup()
   HttpEstablishStaticConfigStringAlloc(c.proxy_hostname, "proxy.config.proxy_name");
   c.proxy_hostname_len = -1;
 
-  if (c.proxy_hostname == NULL) {
+  if (c.proxy_hostname == nullptr) {
     c.proxy_hostname    = (char *)ats_malloc(sizeof(char));
     c.proxy_hostname[0] = '\0';
   }
@@ -1114,9 +1114,9 @@ HttpConfig::startup()
   // Cluster time delta gets it own callback since it needs
   //  to use ink_atomic_swap
   c.cluster_time_delta = 0;
-  RegisterMgmtCallback(MGMT_EVENT_HTTP_CLUSTER_DELTA, cluster_delta_cb, NULL);
+  RegisterMgmtCallback(MGMT_EVENT_HTTP_CLUSTER_DELTA, cluster_delta_cb, nullptr);
 
-  http_config_cont->handleEvent(EVENT_NONE, NULL);
+  http_config_cont->handleEvent(EVENT_NONE, nullptr);
 
   return;
 }
@@ -1224,12 +1224,18 @@ HttpConfig::reconfigure()
 
   params->oride.connect_attempts_max_retries             = m_master.oride.connect_attempts_max_retries;
   params->oride.connect_attempts_max_retries_dead_server = m_master.oride.connect_attempts_max_retries_dead_server;
-  params->oride.connect_attempts_rr_retries              = m_master.oride.connect_attempts_rr_retries;
-  params->oride.connect_attempts_timeout                 = m_master.oride.connect_attempts_timeout;
-  params->oride.post_connect_attempts_timeout            = m_master.oride.post_connect_attempts_timeout;
-  params->oride.parent_connect_attempts                  = m_master.oride.parent_connect_attempts;
-  params->per_parent_connect_attempts                    = m_master.per_parent_connect_attempts;
-  params->parent_connect_timeout                         = m_master.parent_connect_timeout;
+  if (m_master.oride.connect_attempts_rr_retries >= params->oride.connect_attempts_max_retries) {
+    Warning("connect_attempts_rr_retries (%" PRIu64 ") is greater than "
+            "connect_attempts_max_retries (%" PRIu64 "), this means requests "
+            "will never redispatch to another server",
+            m_master.oride.connect_attempts_rr_retries, params->oride.connect_attempts_max_retries);
+  }
+  params->oride.connect_attempts_rr_retries   = m_master.oride.connect_attempts_rr_retries;
+  params->oride.connect_attempts_timeout      = m_master.oride.connect_attempts_timeout;
+  params->oride.post_connect_attempts_timeout = m_master.oride.post_connect_attempts_timeout;
+  params->oride.parent_connect_attempts       = m_master.oride.parent_connect_attempts;
+  params->per_parent_connect_attempts         = m_master.per_parent_connect_attempts;
+  params->parent_connect_timeout              = m_master.parent_connect_timeout;
 
   params->oride.sock_recv_buffer_size_out = m_master.oride.sock_recv_buffer_size_out;
   params->oride.sock_send_buffer_size_out = m_master.oride.sock_send_buffer_size_out;
@@ -1402,7 +1408,7 @@ HttpConfig::acquire()
   if (m_id != 0) {
     return (HttpConfigParams *)configProcessor.get(m_id);
   } else {
-    return NULL;
+    return nullptr;
   }
 }
 
@@ -1425,24 +1431,24 @@ HttpConfig::release(HttpConfigParams *params)
 HttpConfigPortRange *
 HttpConfig::parse_ports_list(char *ports_string)
 {
-  HttpConfigPortRange *ports_list = 0;
+  HttpConfigPortRange *ports_list = nullptr;
 
   if (!ports_string) {
-    return (0);
+    return (nullptr);
   }
 
   if (strchr(ports_string, '*')) {
     ports_list       = new HttpConfigPortRange;
     ports_list->low  = -1;
     ports_list->high = -1;
-    ports_list->next = NULL;
+    ports_list->next = nullptr;
   } else {
     HttpConfigPortRange *pr, *prev;
     char *start;
     char *end;
 
-    pr   = NULL;
-    prev = NULL;
+    pr   = nullptr;
+    prev = nullptr;
 
     start = ports_string;
 
@@ -1465,7 +1471,7 @@ HttpConfig::parse_ports_list(char *ports_string)
       pr       = new HttpConfigPortRange;
       pr->low  = atoi(start);
       pr->high = pr->low;
-      pr->next = NULL;
+      pr->next = nullptr;
 
       if (prev) {
         prev->next = pr;
@@ -1519,7 +1525,7 @@ HttpConfig::cluster_delta_cb(void * /* opaque_token ATS_UNUSED */, char *data_ra
   old = ink_atomic_swap(&HttpConfig::m_master.cluster_time_delta, delta32);
   Debug("http_trans", "Cluster time delta moving from %d to %d", old, delta32);
 
-  return NULL;
+  return nullptr;
 }
 
 volatile int32_t icp_dynamic_enabled;

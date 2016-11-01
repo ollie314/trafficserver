@@ -71,7 +71,7 @@ Init(const char * /* socket_path ATS_UNUSED */, TSInitOptionT options)
       return TS_ERR_SYS_CALL;
     }
   } else {
-    local_event_callbacks = NULL;
+    local_event_callbacks = nullptr;
   }
 
   return TS_ERR_OKAY;
@@ -381,7 +381,7 @@ ServerBacktrace(unsigned /* options */, char **trace)
 TSMgmtError
 ServerBacktrace(unsigned /* options */, char **trace)
 {
-  *trace = NULL;
+  *trace = nullptr;
   return TS_ERR_NOT_SUPPORTED;
 }
 
@@ -397,7 +397,7 @@ Reconfigure()
 {
   configFiles->rereadConfig();                              // TM rereads
   lmgmt->signalEvent(MGMT_EVENT_PLUGIN_CONFIG_UPDATE, "*"); // TS rereads
-  RecSetRecordInt("proxy.node.config.reconfigure_time", time(NULL), REC_SOURCE_DEFAULT);
+  RecSetRecordInt("proxy.node.config.reconfigure_time", time(nullptr), REC_SOURCE_DEFAULT);
   RecSetRecordInt("proxy.node.config.reconfigure_required", 0, REC_SOURCE_DEFAULT);
 
   return TS_ERR_OKAY;
@@ -460,7 +460,7 @@ StorageDeviceCmdOffline(const char *dev)
  * Signal plugins.
  */
 TSMgmtError
-LifecycleMessage(char const *tag, void const *data, size_t data_size)
+LifecycleMessage(const char *tag, void const *data, size_t data_size)
 {
   ink_release_assert(!"Not expected to reach here");
   lmgmt->signalEvent(MGMT_EVENT_LIFECYCLE_MESSAGE, tag);
@@ -897,7 +897,7 @@ ActiveEventGetMlt(LLQ *active_events)
   event_ht = lmgmt->alarm_keeper->getLocalAlarms();
 
   // iterate through hash-table and insert event_name's into active_events list
-  for (entry = ink_hash_table_iterator_first(event_ht, &iterator_state); entry != NULL;
+  for (entry = ink_hash_table_iterator_first(event_ht, &iterator_state); entry != nullptr;
        entry = ink_hash_table_iterator_next(event_ht, &iterator_state)) {
     char *key = (char *)ink_hash_table_entry_key(event_ht, entry);
 
@@ -957,7 +957,7 @@ EventIsActive(const char *event_name, bool *is_current)
 TSMgmtError
 EventSignalCbRegister(const char *event_name, TSEventSignalFunc func, void *data)
 {
-  return cb_table_register(local_event_callbacks, event_name, func, data, NULL);
+  return cb_table_register(local_event_callbacks, event_name, func, data, nullptr);
 }
 
 /*-------------------------------------------------------------------------
