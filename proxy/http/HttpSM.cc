@@ -42,6 +42,7 @@
 
 #include "HttpPages.h"
 
+#include "IPAllow.h"
 //#include "I_Auth.h"
 //#include "HttpAuthParams.h"
 #include "congest/Congestion.h"
@@ -4023,11 +4024,23 @@ HttpSM::do_remap_request(bool run_inline)
     ret = remapProcessor.setup_for_remap(&t_state);
   }
 
-  // Preserve pristine url before remap
-  // This needs to be done after the Host: header for reverse proxy is added to the url, but
-  // before we return from this function for forward proxy
-  t_state.pristine_url.create(t_state.hdr_info.client_request.url_get()->m_heap);
-  t_state.pristine_url.copy(t_state.hdr_info.client_request.url_get());
+  // Preserve effective url before remap
+  t_state.unmapped_url.create(t_state.hdr_info.client_request.url_get()->m_heap);
+  t_state.unmapped_url.copy(t_state.hdr_info.client_request.url_get());
+  // Depending on a variety of factors the HOST field may or may not have been promoted to the
+  // client request URL. The unmapped URL should always have that promotion done. If the HOST field
+  // is not already there, promote it only in the unmapped_url. This avoids breaking any logic that
+  // depends on the lack of promotion in the client request URL.
+  if (!t_state.unmapped_url.m_url_impl->m_ptr_host) {
+    MIMEField *host_field = t_state.hdr_info.client_request.field_find(MIME_FIELD_HOST, MIME_LEN_HOST);
+    if (host_field) {
+      int host_len;
+      const char *host_name = host_field->value_get(&host_len);
+      if (host_name && host_len) {
+        t_state.unmapped_url.host_set(host_name, host_len);
+      }
+    }
+  }
 
   if (!ret) {
     DebugSM("url_rewrite", "Could not find a valid remapping entry for this request [%" PRId64 "]", sm_id);
@@ -4730,7 +4743,50 @@ HttpSM::do_http_server_open(bool raw)
     milestones[TS_MILESTONE_SERVER_FIRST_CONNECT] = milestones[TS_MILESTONE_SERVER_CONNECT];
   }
 
-  if (t_state.pCongestionEntry != nullptr) {
+  // Check for remap rule. If so, only apply ip_allow filter if it is activated (ip_allow_check_enabled_p set).
+  // Otherwise, if no remap rule is defined, apply the ip_allow filter.
+  if (!t_state.url_remap_success || t_state.url_map.getMapping()->ip_allow_check_enabled_p) {
+    // Method allowed on dest IP address check
+    sockaddr *server_ip = &t_state.current.server->dst_addr.sa;
+    IpAllow::scoped_config ip_allow;
+
+    if (ip_allow) {
+      const AclRecord *acl_record = ip_allow->match(server_ip, IpAllow::DEST_ADDR);
+      bool deny_request           = false; // default is fail open.
+      int method                  = t_state.hdr_info.server_request.method_get_wksidx();
+
+      if (acl_record) {
+        // If empty, nothing is allowed, deny. Conversely if all methods are allowed it's OK, do not deny.
+        // Otherwise the method has to be checked specifically.
+        if (acl_record->isEmpty()) {
+          deny_request = true;
+        } else if (acl_record->_method_mask != AclRecord::ALL_METHOD_MASK) {
+          if (method != -1) {
+            deny_request = !acl_record->isMethodAllowed(method);
+          } else {
+            int method_str_len;
+            const char *method_str = t_state.hdr_info.server_request.method_get(&method_str_len);
+            deny_request           = !acl_record->isNonstandardMethodAllowed(std::string(method_str, method_str_len));
+          }
+        }
+      }
+
+      if (deny_request) {
+        if (is_debug_tag_set("ip-allow")) {
+          ip_text_buffer ipb;
+          Warning("server '%s' prohibited by ip-allow policy", ats_ip_ntop(server_ip, ipb, sizeof(ipb)));
+          Debug("ip-allow", "Denial on %s:%s with mask %x", ats_ip_ntop(&t_state.current.server->dst_addr.sa, ipb, sizeof(ipb)),
+                hdrtoken_index_to_wks(method), acl_record ? acl_record->_method_mask : 0x0);
+        }
+        t_state.current.attempts = t_state.txn_conf->connect_attempts_max_retries; // prevent any more retries with this IP
+        call_transact_and_set_next_state(HttpTransact::Forbidden);
+        return;
+      }
+    }
+  }
+
+  // Congestion Check
+  if (t_state.pCongestionEntry != NULL) {
     if (t_state.pCongestionEntry->F_congested() &&
         (!t_state.pCongestionEntry->proxy_retry(milestones[TS_MILESTONE_SERVER_CONNECT]))) {
       t_state.congestion_congested_or_failed = 1;

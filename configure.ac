@@ -191,11 +191,20 @@ AC_MSG_RESULT([$enable_werror])
 # Enable ASAN for the builds
 AC_MSG_CHECKING([whether to enable asan])
 AC_ARG_ENABLE([asan],
-  [AS_HELP_STRING([--enable-asan],[turn on asan])],
+  [AS_HELP_STRING([--enable-asan],[enable Address Sanitizer])],
   [],
   [enable_asan=no]
 )
 AC_MSG_RESULT([$enable_asan])
+
+# Enable TSAN for the builds
+AC_MSG_CHECKING([whether to enable tsan])
+AC_ARG_ENABLE([tsan],
+  [AS_HELP_STRING([--enable-tsan],[turn on Thread Sanitizer])],
+  [],
+  [enable_tsan=no]
+)
+AC_MSG_RESULT([$enable_tsan])
 
 #
 # Fast SDK APIs, this disables the parameter checks (assert)
@@ -913,8 +922,17 @@ fi
 
 # Flags for ASAN
 if test "x${enable_asan}" = "xyes"; then
+  if test "x${enable_tsan}" = "xyes"; then
+    AC_ERROR([Cannot have ASAN and TSAN options at the same time, pick one])
+  fi
   TS_ADDTO(CFLAGS, [-fno-omit-frame-pointer -fsanitize=address])
   TS_ADDTO(CXXFLAGS, [-fno-omit-frame-pointer -fsanitize=address])
+fi
+
+# Flags for TSAN
+if test "x${enable_tsan}" = "xyes"; then
+  TS_ADDTO(CFLAGS, [-fsanitize=thread])
+  TS_ADDTO(CXXFLAGS, [-fsanitize=thread])
 fi
 
 # Checks for pointer size.
@@ -1412,7 +1430,7 @@ esac
 
 # Flags for building and linking against our internal copy of LuaJIT.
 AC_SUBST([LUAJIT_LDFLAGS])
-AC_SUBST([LUAJIT_CPPFLAGS], ['-I$(top_srcdir)/lib/luajit/src'])
+AC_SUBST([LUAJIT_CPPFLAGS], ['-I$(abs_top_srcdir)/lib/luajit/src'])
 
 # We should be able to build http_load if epoll(2) is available.
 AM_CONDITIONAL([BUILD_HTTP_LOAD], [test x"$ac_cv_func_epoll_ctl" = x"yes"])
@@ -1809,14 +1827,14 @@ AM_CONDITIONAL([BUILD_REMAP_STATS_PLUGIN],
 # use modular IOCORE
 #
 iocore_include_dirs="\
--I\$(top_srcdir)/iocore/eventsystem \
--I\$(top_srcdir)/iocore/net \
--I\$(top_srcdir)/iocore/aio \
--I\$(top_srcdir)/iocore/hostdb \
--I\$(top_srcdir)/iocore/cache \
--I\$(top_srcdir)/iocore/cluster \
--I\$(top_srcdir)/iocore/utils \
--I\$(top_srcdir)/iocore/dns"
+-I\$(abs_top_srcdir)/iocore/eventsystem \
+-I\$(abs_top_srcdir)/iocore/net \
+-I\$(abs_top_srcdir)/iocore/aio \
+-I\$(abs_top_srcdir)/iocore/hostdb \
+-I\$(abs_top_srcdir)/iocore/cache \
+-I\$(abs_top_srcdir)/iocore/cluster \
+-I\$(abs_top_srcdir)/iocore/utils \
+-I\$(abs_top_srcdir)/iocore/dns"
 
 # Flags for buildit LuaJIT itself. We take the latest version
 # of the generic flags, plus any Lua-specific flags so that we

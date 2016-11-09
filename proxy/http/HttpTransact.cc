@@ -566,6 +566,16 @@ HttpTransact::BadRequest(State *s)
 }
 
 void
+HttpTransact::Forbidden(State *s)
+{
+  DebugTxn("http_trans", "[Forbidden]"
+                         "IpAllow marked request forbidden");
+  bootstrap_state_variables_from_request(s, &s->hdr_info.client_request);
+  build_error_response(s, HTTP_STATUS_FORBIDDEN, "Access Denied", "access#denied", NULL);
+  TRANSACT_RETURN(SM_ACTION_SEND_ERROR_CACHE_NOOP, NULL);
+}
+
+void
 HttpTransact::HandleBlindTunnel(State *s)
 {
   NetVConnection *vc         = s->state_machine->ua_session->get_netvc();
@@ -6576,6 +6586,12 @@ HttpTransact::process_quick_http_filter(State *s, int method)
     return;
   }
 
+  // if ipallow rules are disabled by remap then don't modify anything
+  url_mapping *mp = s->url_map.getMapping();
+  if (mp && !mp->ip_allow_check_enabled_p) {
+    return;
+  }
+
   if (s->state_machine->ua_session) {
     const AclRecord *acl_record = s->state_machine->ua_session->get_acl_record();
     bool deny_request           = (acl_record == nullptr);
@@ -7923,22 +7939,28 @@ HttpTransact::build_response(State *s, HTTPHdr *base_response, HTTPHdr *outgoing
         // Since a proxy doesn't know if a header differs from
         // a user agent's cached document or not, all are sent.
         {
-          static const char *field_name[] = {MIME_FIELD_ETAG, MIME_FIELD_CONTENT_LOCATION, MIME_FIELD_EXPIRES,
-                                             MIME_FIELD_CACHE_CONTROL, MIME_FIELD_VARY};
-          static int field_len[] = {MIME_LEN_ETAG, MIME_LEN_CONTENT_LOCATION, MIME_LEN_EXPIRES, MIME_LEN_CACHE_CONTROL,
-                                    MIME_LEN_VARY};
-          static uint64_t field_presence[] = {MIME_PRESENCE_ETAG, MIME_PRESENCE_CONTENT_LOCATION, MIME_PRESENCE_EXPIRES,
-                                              MIME_PRESENCE_CACHE_CONTROL, MIME_PRESENCE_VARY};
-          MIMEField *field;
-          int len;
-          const char *value;
+          static const struct {
+            const char *name;
+            int len;
+            uint64_t presence;
+          } fields[] = {
+            {MIME_FIELD_ETAG, MIME_LEN_ETAG, MIME_PRESENCE_ETAG},
+            {MIME_FIELD_CONTENT_LOCATION, MIME_LEN_CONTENT_LOCATION, MIME_PRESENCE_CONTENT_LOCATION},
+            {MIME_FIELD_EXPIRES, MIME_LEN_EXPIRES, MIME_PRESENCE_EXPIRES},
+            {MIME_FIELD_CACHE_CONTROL, MIME_LEN_CACHE_CONTROL, MIME_PRESENCE_CACHE_CONTROL},
+            {MIME_FIELD_VARY, MIME_LEN_VARY, MIME_PRESENCE_VARY},
+          };
 
-          for (size_t i = 0; i < sizeof(field_len) / sizeof(field_len[0]); i++) {
-            if (base_response->presence(field_presence[i])) {
-              field = base_response->field_find(field_name[i], field_len[i]);
+          for (size_t i = 0; i < countof(fields); i++) {
+            if (base_response->presence(fields[i].presence)) {
+              MIMEField *field;
+              int len;
+              const char *value;
+
+              field = base_response->field_find(fields[i].name, fields[i].len);
               ink_assert(field != nullptr);
               value = field->value_get(&len);
-              outgoing_response->value_append(field_name[i], field_len[i], value, len, 0);
+              outgoing_response->value_append(fields[i].name, fields[i].len, value, len, 0);
             }
           }
         }

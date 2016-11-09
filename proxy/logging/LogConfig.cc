@@ -28,6 +28,8 @@
 #include <sys/param.h>
 #endif
 
+#include <memory>
+
 #include "ts/ink_platform.h"
 #include "ts/ink_file.h"
 
@@ -392,13 +394,13 @@ LogConfig::init(LogConfig *prev_config)
   // ----------------------------------------------------------------------
   // Construct a new error log object candidate.
   if (Log::error_logging_enabled()) {
-    LogFormat *fmt;
+    std::unique_ptr<LogFormat> fmt(MakeTextLogFormat("error"));
 
     Debug("log", "creating predefined error log object");
 
-    fmt    = MakeTextLogFormat("error");
-    errlog = new LogObject(fmt, logfile_dir, "error.log", LOG_FILE_ASCII, nullptr, (Log::RollingEnabledValues)rolling_enabled,
+    errlog = new LogObject(fmt.get(), logfile_dir, "error.log", LOG_FILE_ASCII, nullptr, (Log::RollingEnabledValues)rolling_enabled,
                            collation_preproc_threads, rolling_interval_sec, rolling_offset_hr, rolling_size_mb);
+
     log_object_manager.manage_object(errlog);
     errlog->set_fmt_timestamps();
   } else {
@@ -708,8 +710,7 @@ LogConfig::update_space_used()
   int64_t total_space_used, partition_space_left;
   char path[MAXPATHLEN];
   int sret;
-  struct dirent entry;
-  struct dirent *result;
+  struct dirent *entry;
   struct stat sbuf;
   DIR *ld;
 
@@ -722,8 +723,8 @@ LogConfig::update_space_used()
     m_log_directory_inaccessible = true;
     return;
   }
+
   // check if logging directory exists and is searchable readable & writable
-  //
   int err;
   do {
     err = access(logfile_dir, R_OK | W_OK | X_OK);
@@ -749,18 +750,14 @@ LogConfig::update_space_used()
   total_space_used = 0LL;
   candidate_count  = 0;
 
-  while (readdir_r(ld, &entry, &result) == 0) {
-    if (!result) {
-      break;
-    }
-
-    snprintf(path, MAXPATHLEN, "%s/%s", logfile_dir, entry.d_name);
+  while ((entry = readdir(ld))) {
+    snprintf(path, MAXPATHLEN, "%s/%s", logfile_dir, entry->d_name);
 
     sret = ::stat(path, &sbuf);
     if (sret != -1 && S_ISREG(sbuf.st_mode)) {
       total_space_used += (int64_t)sbuf.st_size;
 
-      if (auto_delete_rolled_files && LogFile::rolled_logfile(entry.d_name) && candidate_count < MAX_CANDIDATES) {
+      if (auto_delete_rolled_files && LogFile::rolled_logfile(entry->d_name) && candidate_count < MAX_CANDIDATES) {
         //
         // then add this entry to the candidate list
         //
@@ -771,6 +768,7 @@ LogConfig::update_space_used()
       }
     }
   }
+
   ::closedir(ld);
 
   //
