@@ -741,6 +741,7 @@ typedef enum {
   TS_CONFIG_HTTP_PARENT_PROXY_TOTAL_CONNECT_ATTEMPTS,
   TS_CONFIG_HTTP_TRANSACTION_ACTIVE_TIMEOUT_IN,
   TS_CONFIG_SRV_ENABLED,
+  TS_CONFIG_HTTP_FORWARD_CONNECT_METHOD,
   TS_CONFIG_LAST_ENTRY
 } TSOverridableConfigKey;
 
@@ -888,6 +889,8 @@ extern tsapi const char *TS_URL_SCHEME_RTSPU;
 extern tsapi const char *TS_URL_SCHEME_MMS;
 extern tsapi const char *TS_URL_SCHEME_MMSU;
 extern tsapi const char *TS_URL_SCHEME_MMST;
+extern tsapi const char *TS_URL_SCHEME_WS;
+extern tsapi const char *TS_URL_SCHEME_WSS;
 
 /* --------------------------------------------------------------------------
    URL scheme string lengths */
@@ -902,6 +905,8 @@ extern tsapi int TS_URL_LEN_NNTP;
 extern tsapi int TS_URL_LEN_PROSPERO;
 extern tsapi int TS_URL_LEN_TELNET;
 extern tsapi int TS_URL_LEN_WAIS;
+extern tsapi int TS_URL_LEN_WS;
+extern tsapi int TS_URL_LEN_WSS;
 
 /* --------------------------------------------------------------------------
    MIME fields */

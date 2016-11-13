@@ -464,10 +464,16 @@ how_to_open_connection(HttpTransact::State *s)
     break;
   }
 
-  if (s->method == HTTP_WKSIDX_CONNECT && s->parent_result.result != PARENT_SPECIFIED) {
-    s->cdn_saved_next_action = HttpTransact::SM_ACTION_ORIGIN_SERVER_RAW_OPEN;
-  } else {
-    s->cdn_saved_next_action = HttpTransact::SM_ACTION_ORIGIN_SERVER_OPEN;
+  s->cdn_saved_next_action = HttpTransact::SM_ACTION_ORIGIN_SERVER_OPEN;
+
+  // Setting up a direct CONNECT tunnel enters OriginServerRawOpen. We always do that if we
+  // are not forwarding CONNECT and are not going to a parent proxy.
+  if (s->method == HTTP_WKSIDX_CONNECT) {
+    if (s->txn_conf->forward_connect_method == 1 || s->parent_result.result != PARENT_SPECIFIED) {
+      s->cdn_saved_next_action = HttpTransact::SM_ACTION_ORIGIN_SERVER_OPEN;
+    } else {
+      s->cdn_saved_next_action = HttpTransact::SM_ACTION_ORIGIN_SERVER_RAW_OPEN;
+    }
   }
 
   // In the following, if url_remap_mode == 2 (URL_REMAP_FOR_OS)
@@ -550,7 +556,7 @@ how_to_open_connection(HttpTransact::State *s)
  ****                 HttpTransact State Machine Handlers                 ****
  ****                                                                     ****
  **** What follow from here on are the state machine handlers - the code  ****
- **** which is called from HttpSM::set_next_state to specify ****
+ **** which is called from HttpSM::set_next_state to specify              ****
  **** what action the state machine needs to execute next. These ftns     ****
  **** take as input just the state and set the next_action variable.      ****
  *****************************************************************************
@@ -5212,39 +5218,28 @@ HttpTransact::add_client_ip_to_outgoing_request(State *s, HTTPHdr *request)
     ip_string[0]   = 0;
   }
 
-  ////////////////////////////////////////////////////////////////
-  // if we want client-ip headers, and there isn't one, add one //
-  ////////////////////////////////////////////////////////////////
+  // Check to see if the ip_string has been set
+  if (ip_string_size == 0) {
+    return;
+  }
+
+  // if we want client-ip headers, and there isn't one, add one
   if ((s->txn_conf->anonymize_insert_client_ip) && (!s->txn_conf->anonymize_remove_client_ip)) {
     bool client_ip_set = request->presence(MIME_PRESENCE_CLIENT_IP);
     DebugTxn("http_trans", "client_ip_set = %d", client_ip_set);
 
-    if (!client_ip_set && ip_string_size > 0) {
+    if (client_ip_set == true) {
       request->value_set(MIME_FIELD_CLIENT_IP, MIME_LEN_CLIENT_IP, ip_string, ip_string_size);
       DebugTxn("http_trans", "inserted request header 'Client-ip: %s'", ip_string);
     }
   }
 
+  // Add or append to the X-Forwarded-For header
   if (s->txn_conf->insert_squid_x_forwarded_for) {
-    if (ip_string_size > 0) {
-      MIMEField *x_for;
-
-      if ((x_for = request->field_find(MIME_FIELD_X_FORWARDED_FOR, MIME_LEN_X_FORWARDED_FOR)) != nullptr) {
-        // http://en.wikipedia.org/wiki/X-Forwarded-For
-        // The X-Forwarded-For (XFF) HTTP header field is a de facto standard
-        // for identifying the originating IP address of a client connecting
-        // to a web server through an HTTP proxy or load balancer. This is a
-        // non-RFC-standard request field which was introduced by the Squid
-        // caching proxy server's developers.
-        //   X-Forwarded-For: client1, proxy1, proxy2
-        request->field_value_append(x_for, ip_string, ip_string_size, true); // true => comma must be inserted
-      } else {
-        request->value_set(MIME_FIELD_X_FORWARDED_FOR, MIME_LEN_X_FORWARDED_FOR, ip_string, ip_string_size);
-      }
-      DebugTxn("http_trans", "[add_client_ip_to_outgoing_request] Appended connecting client's "
-                             "(%s) to the X-Forwards header",
-               ip_string);
-    }
+    request->value_append_or_set(MIME_FIELD_X_FORWARDED_FOR, MIME_LEN_X_FORWARDED_FOR, ip_string, ip_string_size);
+    DebugTxn("http_trans", "[add_client_ip_to_outgoing_request] Appended connecting client's "
+                           "(%s) to the X-Forwards header",
+             ip_string);
   }
 }
 
@@ -7820,27 +7815,22 @@ HttpTransact::build_request(State *s, HTTPHdr *base_request, HTTPHdr *outgoing_r
     }
   }
 
-  if (s->current.server == &s->server_info && (s->next_hop_scheme == URL_WKSIDX_HTTP || s->next_hop_scheme == URL_WKSIDX_HTTPS ||
-                                               s->next_hop_scheme == URL_WKSIDX_WS || s->next_hop_scheme == URL_WKSIDX_WSS)) {
+  // Figure out whether to force the outgoing request URL into absolute or relative styles.
+  if (outgoing_request->method_get_wksidx() == HTTP_WKSIDX_CONNECT) {
+    // CONNECT method requires a target in the URL, so always force it from the Host header.
+    outgoing_request->set_url_target_from_host_field();
+  } else if (s->current.request_to == PARENT_PROXY && s->parent_result.parent_is_proxy()) {
+    // If we have a parent proxy set the URL target field.
+    if (!outgoing_request->is_target_in_url()) {
+      DebugTxn("http_trans", "[build_request] adding target to URL for parent proxy");
+      outgoing_request->set_url_target_from_host_field();
+    }
+  } else if (s->next_hop_scheme == URL_WKSIDX_HTTP || s->next_hop_scheme == URL_WKSIDX_HTTPS ||
+             s->next_hop_scheme == URL_WKSIDX_WS || s->next_hop_scheme == URL_WKSIDX_WSS) {
+    // Otherwise, remove the URL target from HTTP and Websocket URLs since certain origins
+    // cannot deal with absolute URLs.
     DebugTxn("http_trans", "[build_request] removing host name from url");
     HttpTransactHeaders::remove_host_name_from_url(outgoing_request);
-  }
-
-  // If we're going to a parent proxy, make sure we pass host and port
-  // in the URL even if we didn't get them (e.g. transparent proxy)
-  if (s->current.request_to == PARENT_PROXY) {
-    if (!outgoing_request->is_target_in_url() && s->parent_result.parent_is_proxy()) {
-      DebugTxn("http_trans", "[build_request] adding target to URL for parent proxy");
-
-      // No worry about HTTP/0.9 because we reject forward proxy requests that
-      // don't have a host anywhere.
-      outgoing_request->set_url_target_from_host_field();
-    } else if (s->current.request_to == PARENT_PROXY && !s->parent_result.parent_is_proxy() &&
-               outgoing_request->is_target_in_url()) {
-      // If the parent is an origin server remove the hostname from the url.
-      DebugTxn("http_trans", "[build_request] removing target from URL for a parent origin.");
-      HttpTransactHeaders::remove_host_name_from_url(outgoing_request);
-    }
   }
 
   // If the response is most likely not cacheable, eg, request with Authorization,
